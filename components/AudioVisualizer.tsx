@@ -3,7 +3,7 @@ import { AudioVisualizerProps } from '../types';
 
 const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream, isRecording }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -92,7 +92,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ stream, isRecording }
       ref={canvasRef} 
       width={600} 
       height={150} 
-      className="w-full h-32 rounded-lg bg-slate-800/50 shadow-inner"
+      className="w-full h-32 rounded-lg bg-surface-800/50 shadow-inner"
     />
   );
 };

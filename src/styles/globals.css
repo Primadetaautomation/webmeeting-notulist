@@ -1,0 +1,179 @@
+/* Import Inter font - must be first */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-surface-900 text-surface-100 font-sans;
+  }
+
+  ::selection {
+    @apply bg-primary-500 text-white;
+  }
+}
+
+/* Component utilities */
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-surface-800 rounded-xl border border-surface-700 shadow-lg;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-200 hover:border-surface-600 hover:shadow-xl;
+  }
+
+  /* Button base styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold rounded-full
+           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2
+           focus:ring-offset-surface-900 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 hover:bg-primary-500 text-white px-8 py-3
+           shadow-glow-primary hover:scale-105 active:scale-95 focus:ring-primary-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-surface-700 hover:bg-surface-600 text-surface-100 px-6 py-2.5
+           border border-surface-600 hover:border-surface-500 focus:ring-surface-500;
+  }
+
+  .btn-success {
+    @apply btn bg-success-600 hover:bg-success-500 text-white px-6 py-2.5
+           shadow-glow-success focus:ring-success-500;
+  }
+
+  .btn-danger {
+    @apply btn bg-error-600 hover:bg-error-500 text-white px-8 py-3
+           shadow-glow-error hover:scale-105 active:scale-95 focus:ring-error-500;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent hover:bg-surface-800 text-surface-400 hover:text-surface-100
+           px-4 py-2 focus:ring-surface-500;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3
+           text-surface-100 placeholder-surface-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+           transition-all duration-200;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary-500/20 text-primary-300 border border-primary-500/30;
+  }
+
+  .badge-success {
+    @apply badge bg-success-500/20 text-success-300 border border-success-500/30;
+  }
+
+  .badge-error {
+    @apply badge bg-error-500/20 text-error-300 border border-error-500/30;
+  }
+
+  /* Recording indicator */
+  .recording-indicator {
+    @apply flex items-center gap-2 bg-error-500/20 px-3 py-1 rounded-full border border-error-500/50;
+  }
+
+  .recording-dot {
+    @apply w-2 h-2 bg-error-500 rounded-full animate-pulse;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-surface-900/80 backdrop-blur-md;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 to-accent-400;
+  }
+
+  .text-gradient-hero {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-400 via-accent-300 to-primary-400;
+  }
+}
+
+/* Custom scrollbar */
+@layer utilities {
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-track {
+    @apply bg-surface-800 rounded;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    @apply bg-surface-600 rounded hover:bg-surface-500;
+  }
+
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Prose overrides for markdown */
+.prose-custom {
+  @apply prose prose-invert prose-slate max-w-none;
+}
+
+.prose-custom h1,
+.prose-custom h2,
+.prose-custom h3,
+.prose-custom h4 {
+  @apply text-surface-100 font-semibold;
+}
+
+.prose-custom p {
+  @apply text-surface-300;
+}
+
+.prose-custom strong {
+  @apply text-accent-400 font-semibold;
+}
+
+.prose-custom ul,
+.prose-custom ol {
+  @apply text-surface-300;
+}
+
+.prose-custom code {
+  @apply bg-surface-800 text-accent-300 px-1.5 py-0.5 rounded text-sm;
+}
+
+.prose-custom pre {
+  @apply bg-surface-800 border border-surface-700 rounded-lg;
+}
+
+.prose-custom blockquote {
+  @apply border-l-primary-500 text-surface-400 italic;
+}
+
+.prose-custom a {
+  @apply text-primary-400 hover:text-primary-300 transition-colors;
+}

@@ -1,16 +1,19 @@
-// @ts-nocheck
-import { GoogleGenAI } from "@google/genai";
-import { GoogleAIFileManager } from "@google/generative-ai/server";
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import https from 'https';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// NOTE: We use the Node-specific GoogleAIFileManager for file uploads
-// and @google/genai for the generation.
-// Ensure process.env.API_KEY is available in Vercel environment variables.
+// NOTE: This API route uses @google/generative-ai for server-side file uploads
+// The file is downloaded from Supabase, uploaded to Gemini, and transcribed
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -26,26 +29,51 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'Server misconfiguration: API_KEY missing' });
   }
 
-  const tempFilePath = path.join(os.tmpdir(), `upload_${Date.now()}.webm`);
-
   try {
+    // Dynamic imports for Node.js modules (Vercel serverless compatible)
+    const { GoogleGenAI } = await import('@google/genai');
+    const { GoogleAIFileManager } = await import('@google/generative-ai/server');
+    const fs = await import('fs');
+    const path = await import('path');
+    const os = await import('os');
+    const https = await import('https');
+
+    const tempFilePath = path.join(os.tmpdir(), `upload_${Date.now()}.webm`);
+
     // 1. Download file from Supabase URL to temp storage
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const file = fs.createWriteStream(tempFilePath);
-      https.get(fileUrl, (response) => {
-        response.pipe(file);
-        file.on('finish', () => {
-          file.close();
-          resolve(true);
-        });
-      }).on('error', (err) => {
+
+      // Handle both http and https
+      const protocol = fileUrl.startsWith('https') ? https : require('http');
+
+      protocol.get(fileUrl, (response: any) => {
+        // Handle redirects
+        if (response.statusCode === 301 || response.statusCode === 302) {
+          protocol.get(response.headers.location, (redirectResponse: any) => {
+            redirectResponse.pipe(file);
+            file.on('finish', () => {
+              file.close();
+              resolve();
+            });
+          }).on('error', (err: Error) => {
+            fs.unlink(tempFilePath, () => {});
+            reject(err);
+          });
+        } else {
+          response.pipe(file);
+          file.on('finish', () => {
+            file.close();
+            resolve();
+          });
+        }
+      }).on('error', (err: Error) => {
         fs.unlink(tempFilePath, () => {});
         reject(err);
       });
     });
 
     // 2. Upload to Gemini File Manager
-    // Note: We use the 'GoogleAIFileManager' from the server SDK here as it handles large file uploads robustly
     const fileManager = new GoogleAIFileManager(apiKey);
     const uploadResult = await fileManager.uploadFile(tempFilePath, {
       mimeType: mimeType || 'audio/webm',
@@ -54,8 +82,8 @@ export default async function handler(req: any, res: any) {
 
     // 3. Generate Content using the File URI
     const ai = new GoogleGenAI({ apiKey });
-    
-    // We wait for the file to be active (usually instant for audio, but good practice)
+
+    // Wait for the file to be active
     let file = await fileManager.getFile(uploadResult.file.name);
     while (file.state === 'PROCESSING') {
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -78,18 +106,32 @@ export default async function handler(req: any, res: any) {
           },
           {
             text: `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
-            
-            BELANGRIJK VOOR SPREKER IDENTIFICATIE:
-            De audio is opgenomen in stereo:
-            - LINKER KANAAL: De hoofdgebruiker ('Ik').
-            - RECHTER KANAAL: De vergadering ('Deelnemers').
-            
-            Instructies:
-            1. Gebruik stereokanalen voor sprekeridentificatie.
-            2. Formatteer als script:
-               **Ik:** ...
-               **Deelnemer:** ...
-            3. Eindig met "**Samenvatting & Actiepunten**".`
+
+BELANGRIJK VOOR SPREKER IDENTIFICATIE:
+De audio is opgenomen in stereo:
+- LINKER KANAAL: De hoofdgebruiker ('Ik').
+- RECHTER KANAAL: De vergadering ('Deelnemers').
+
+Instructies:
+1. Gebruik stereokanalen voor sprekeridentificatie.
+2. Formatteer als script:
+   **Ik:** ...
+   **Deelnemer:** ...
+3. Groepeer per spreker waar mogelijk (niet elke zin apart).
+4. Eindig ALTIJD met:
+
+## Samenvatting
+[Korte samenvatting van het gesprek in 2-3 zinnen]
+
+## Actiepunten
+- [Actiepunt 1]
+- [Actiepunt 2]
+- etc.
+
+## Beslissingen
+- [Beslissing 1]
+- [Beslissing 2]
+- etc.`
           }
         ]
       }
@@ -105,10 +147,6 @@ export default async function handler(req: any, res: any) {
 
   } catch (error: any) {
     console.error("Server Error:", error);
-    // Cleanup temp file if exists
-    if (fs.existsSync(tempFilePath)) {
-      fs.unlink(tempFilePath, () => {});
-    }
     return res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }
