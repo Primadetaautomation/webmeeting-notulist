@@ -47,7 +47,17 @@ const CheckIcon = () => (
   </svg>
 );
 
-const Recorder: React.FC = () => {
+const SaveIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+  </svg>
+);
+
+interface RecorderProps {
+  onSave?: (content: string, durationSeconds?: number) => Promise<void>;
+}
+
+const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [status, setStatus] = useState<RecordingState>(RecordingState.IDLE);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [transcription, setTranscription] = useState<string | null>(null);
@@ -55,6 +65,8 @@ const Recorder: React.FC = () => {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState<number>(0);
 
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -62,6 +74,7 @@ const Recorder: React.FC = () => {
   const micStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number | null>(null);
 
   const stopStreams = useCallback(() => {
     if (micStreamRef.current) {
@@ -158,6 +171,14 @@ const Recorder: React.FC = () => {
       recorder.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeType });
         setRecordedBlob(blob);
+
+        // Calculate recording duration
+        if (recordingStartTimeRef.current) {
+          const durationMs = Date.now() - recordingStartTimeRef.current;
+          setRecordingDuration(Math.round(durationMs / 1000));
+          recordingStartTimeRef.current = null;
+        }
+
         stopStreams();
         setStatus(RecordingState.COMPLETED);
       };
@@ -165,6 +186,7 @@ const Recorder: React.FC = () => {
       sysAudioTrack.onended = () => stopRecording();
 
       recorder.start(1000);
+      recordingStartTimeRef.current = Date.now();
       setStatus(RecordingState.RECORDING);
 
     } catch (err: any) {
@@ -186,19 +208,33 @@ const Recorder: React.FC = () => {
 
     setStatus(RecordingState.PROCESSING);
     setUploadProgress("Uploaden naar server...");
+    setSaved(false);
 
     try {
+      let text: string;
       if (process.env.VITE_SUPABASE_URL) {
-        const text = await processAudioRecording(recordedBlob);
-        setTranscription(text);
+        text = await processAudioRecording(recordedBlob);
       } else {
         setUploadProgress("Lokale verwerking...");
-        const text = await transcribeAudioDirect(recordedBlob);
-        setTranscription(text);
+        text = await transcribeAudioDirect(recordedBlob);
       }
 
+      setTranscription(text);
       setStatus(RecordingState.COMPLETED);
       setUploadProgress("");
+
+      // Auto-save transcription if onSave prop is provided
+      if (onSave && text) {
+        try {
+          setUploadProgress("Opslaan...");
+          await onSave(text, recordingDuration > 0 ? recordingDuration : undefined);
+          setSaved(true);
+          setUploadProgress("");
+        } catch (saveErr) {
+          console.error('Failed to auto-save transcription:', saveErr);
+          // Don't set error - transcription succeeded, just save failed
+        }
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMsg("Fout: " + err.message);
@@ -213,6 +249,8 @@ const Recorder: React.FC = () => {
     setRecordedBlob(null);
     setErrorMsg(null);
     setUploadProgress("");
+    setSaved(false);
+    setRecordingDuration(0);
   };
 
   const copyToClipboard = () => {
@@ -300,6 +338,11 @@ const Recorder: React.FC = () => {
             <div className="flex flex-col items-center gap-4 animate-fade-in">
               <p className="text-surface-400 text-sm">
                 Opname voltooid ({Math.round(recordedBlob.size / 1024)} KB)
+                {recordingDuration > 0 && (
+                  <span className="ml-2">
+                    - {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')} min
+                  </span>
+                )}
               </p>
               <button
                 onClick={handleTranscribe}
@@ -336,10 +379,18 @@ const Recorder: React.FC = () => {
         <div className="card animate-slide-up">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-surface-700">
-            <h3 className="text-lg font-semibold text-success-400 flex items-center gap-2">
-              <CheckIcon />
-              Transcriptie & Samenvatting
-            </h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-lg font-semibold text-success-400 flex items-center gap-2">
+                <CheckIcon />
+                Transcriptie & Samenvatting
+              </h3>
+              {saved && (
+                <span className="badge-primary flex items-center gap-1">
+                  <SaveIcon />
+                  <span>Opgeslagen</span>
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={copyToClipboard}

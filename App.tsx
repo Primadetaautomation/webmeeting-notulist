@@ -1,5 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useTranscriptions } from './hooks/useTranscriptions';
 import Recorder from './components/Recorder';
+import LoginPage from './pages/LoginPage';
+import Dashboard from './pages/Dashboard';
 
 // Icons
 const MicrophoneIcon = () => (
@@ -15,10 +19,80 @@ const SparklesIcon = () => (
   </svg>
 );
 
-function App() {
+const UserIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+  </svg>
+);
+
+const FolderIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+  </svg>
+);
+
+const LogOutIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+  </svg>
+);
+
+type Page = 'recorder' | 'dashboard';
+
+// Main App Content (needs auth context)
+const AppContent: React.FC = () => {
+  const { user, loading, initialized, signOut } = useAuth();
+  const { transcriptions, createTranscription } = useTranscriptions();
+  const [currentPage, setCurrentPage] = useState<Page>('recorder');
+
+  // Show loading while initializing
+  if (!initialized || loading) {
+    return (
+      <div className="min-h-screen bg-surface-900 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
+
+  // Show login if not authenticated
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // Show dashboard
+  if (currentPage === 'dashboard') {
+    return (
+      <div>
+        <Dashboard />
+        {/* Floating button to go back to recorder */}
+        <button
+          onClick={() => setCurrentPage('recorder')}
+          className="fixed bottom-20 right-4 btn-primary shadow-lg"
+        >
+          <MicrophoneIcon />
+          <span>Nieuwe Opname</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Save transcription handler
+  const handleSaveTranscription = async (content: string, durationSeconds?: number) => {
+    try {
+      const title = content.substring(0, 50) + '...';
+      await createTranscription({
+        title,
+        transcript_text: content,
+        audio_duration_seconds: durationSeconds,
+      });
+    } catch (err) {
+      console.error('Failed to save transcription:', err);
+    }
+  };
+
+  // Main recorder page
   return (
     <div className="min-h-screen bg-surface-900 text-surface-100 font-sans selection:bg-primary-500 selection:text-white">
-
       {/* Animated background gradient */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-radial from-primary-900/20 via-transparent to-transparent" />
@@ -33,17 +107,39 @@ function App() {
               <MicrophoneIcon />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gradient">
-                Vergader Notulist
-              </h1>
+              <h1 className="text-lg font-bold text-gradient">Vergader Notulist</h1>
               <p className="text-xs text-surface-500 -mt-0.5">AI-powered transcriptie</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="badge-primary">
+            <div className="badge-primary hidden sm:flex">
               <SparklesIcon />
               <span>Gemini 2.5</span>
+            </div>
+
+            {/* My Transcriptions Button */}
+            <button
+              onClick={() => setCurrentPage('dashboard')}
+              className="btn-ghost relative"
+            >
+              <FolderIcon />
+              <span className="hidden sm:inline">Mijn Transcripties</span>
+              {transcriptions.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full text-xs flex items-center justify-center">
+                  {transcriptions.length}
+                </span>
+              )}
+            </button>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-2 pl-2 border-l border-surface-700">
+              <span className="text-sm text-surface-400 hidden md:block truncate max-w-32">
+                {user.email}
+              </span>
+              <button onClick={signOut} className="btn-ghost" title="Uitloggen">
+                <LogOutIcon />
+              </button>
             </div>
           </div>
         </div>
@@ -55,7 +151,7 @@ function App() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 bg-surface-800/50 border border-surface-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
-              <span className="text-sm text-surface-400">Nu met stereo spraakherkenning</span>
+              <span className="text-sm text-surface-400">Ingelogd als {user.email?.split('@')[0]}</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-6">
@@ -79,7 +175,7 @@ function App() {
               { icon: '🎤', text: 'Microfoon + Systeemgeluid' },
               { icon: '🔊', text: 'Stereo Spraakherkenning' },
               { icon: '📝', text: 'Auto Samenvatting' },
-              { icon: '✅', text: 'Actiepunten Extractie' },
+              { icon: '💾', text: 'Automatisch Opslaan' },
             ].map((feature, i) => (
               <div
                 key={i}
@@ -93,7 +189,7 @@ function App() {
         </section>
 
         {/* Main Recorder Component */}
-        <Recorder />
+        <Recorder onSave={handleSaveTranscription} />
       </main>
 
       {/* Footer */}
@@ -102,11 +198,20 @@ function App() {
           <span>© 2024 Vergader Notulist AI</span>
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-success-500 rounded-full" />
-            Privacy-first — audio wordt niet opgeslagen
+            Je transcripties worden veilig opgeslagen
           </span>
         </div>
       </footer>
     </div>
+  );
+};
+
+// Root App with AuthProvider
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 
