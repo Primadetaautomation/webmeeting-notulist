@@ -97,7 +97,38 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
-      // Get current session from Supabase
+      // Check if we have hash params from OAuth callback
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token')) {
+        console.log('[AuthContext] OAuth callback detected, processing tokens...');
+
+        // Parse hash params and set session manually
+        const hashParams = new URLSearchParams(hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken
+          });
+
+          if (error) {
+            console.error('[AuthContext] Failed to set session from hash:', error);
+          } else if (data.session) {
+            console.log('[AuthContext] Session set from OAuth callback:', data.session.user.email);
+            setSession(data.session);
+            setUser(data.session.user as User);
+          }
+
+          // Clear hash from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          setInitialized(true);
+          return;
+        }
+      }
+
+      // Normal session retrieval (from localStorage)
       const { data: { session: currentSession }, error } = await supabase.auth.getSession();
 
       if (error) {
@@ -106,8 +137,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (currentSession) {
+        console.log('[AuthContext] Session found:', currentSession.user.email);
         setSession(currentSession);
         setUser(currentSession.user as User);
+      } else {
+        console.log('[AuthContext] No session found');
       }
     } catch (error) {
       console.error('[AuthContext] Initialize error:', error);
