@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { RecordingState } from '../types';
-import { transcribeAudio } from '../services/geminiService';
+import { processAudioRecording, transcribeAudioDirect } from '../services/geminiService';
 import AudioVisualizer from './AudioVisualizer';
 import ReactMarkdown from 'react-markdown';
 
@@ -29,6 +29,7 @@ const Recorder: React.FC = () => {
   const [transcription, setTranscription] = useState<string | null>(null);
   const [mixedStream, setMixedStream] = useState<MediaStream | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string>("");
 
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -59,6 +60,7 @@ const Recorder: React.FC = () => {
     setErrorMsg(null);
     setTranscription(null);
     chunksRef.current = [];
+    setUploadProgress("");
 
     try {
       // 1. Setup Audio Context
@@ -66,11 +68,9 @@ const Recorder: React.FC = () => {
       const ctx = new AudioContextClass();
       audioContextRef.current = ctx;
       
-      // Create a stereo destination
       const destination = ctx.createMediaStreamDestination();
-      destination.channelCount = 2; // Ensure stereo output
+      destination.channelCount = 2; 
 
-      // Create a Channel Merger to split Mic (Left) and System (Right)
       const merger = ctx.createChannelMerger(2);
 
       // 2. Get Microphone Stream
@@ -84,8 +84,6 @@ const Recorder: React.FC = () => {
         });
         micStreamRef.current = micStream;
         const micSource = ctx.createMediaStreamSource(micStream);
-        
-        // Connect Mic to Input 0 (Left Channel) of merger
         micSource.connect(merger, 0, 0); 
       } catch (err) {
         throw new Error("Geen toegang tot microfoon. Controleer je browser instellingen.");
@@ -103,44 +101,35 @@ const Recorder: React.FC = () => {
         });
         screenStreamRef.current = screenStream;
       } catch (err) {
-        throw new Error("Scherm delen geannuleerd. Dit is nodig om systeemgeluid (Teams/Meet) op te nemen.");
+        throw new Error("Opname geannuleerd. Je MOET 'Systeemgeluid delen' (of Audio delen) aanvinken in het scherm-deel venster.");
       }
 
-      // Check if user actually shared audio
       const sysAudioTrack = screenStream.getAudioTracks()[0];
       if (!sysAudioTrack) {
         stopStreams();
-        throw new Error("Geen systeemgeluid gedetecteerd. Zorg dat je 'Audio delen' aanvinkt in het scherm-deel venster.");
+        throw new Error("Geen systeemgeluid gedetecteerd! Kies 'Hele Scherm' en vink 'Audio delen' aan.");
       }
 
       const sysSource = ctx.createMediaStreamSource(screenStream);
-      // Connect System to Input 1 (Right Channel) of merger
-      // NOTE: Inputs to ChannelMerger are summed to mono if they aren't already. 
-      // This is perfect for downmixing stereo system audio to the Right channel.
       sysSource.connect(merger, 0, 1);
-
-      // Connect merger to destination
       merger.connect(destination);
 
-      // 4. Setup Recorder with the mixed stereo stream
+      // 4. Setup Recorder
       const combinedStream = destination.stream;
       setMixedStream(combinedStream);
       
-      // Use a bitrate that supports good stereo quality
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
         ? 'audio/webm;codecs=opus' 
         : 'audio/webm';
 
       const recorder = new MediaRecorder(combinedStream, { 
         mimeType,
-        audioBitsPerSecond: 128000 // 128kbps is usually sufficient for Opus stereo voice
+        audioBitsPerSecond: 128000 
       });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
+        if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = () => {
@@ -150,10 +139,7 @@ const Recorder: React.FC = () => {
         setStatus(RecordingState.COMPLETED);
       };
 
-      // Handle if user stops sharing screen via browser UI
-      sysAudioTrack.onended = () => {
-        stopRecording();
-      };
+      sysAudioTrack.onended = () => stopRecording();
 
       recorder.start(1000);
       setStatus(RecordingState.RECORDING);
@@ -176,13 +162,28 @@ const Recorder: React.FC = () => {
     if (!recordedBlob) return;
     
     setStatus(RecordingState.PROCESSING);
+    setUploadProgress("Uploaden en verwerken...");
+    
     try {
-      const text = await transcribeAudio(recordedBlob);
-      setTranscription(text);
+      // Try backend processing first (if Supabase is configured)
+      // If VITE_SUPABASE_URL is missing, it will throw, and we can catch/fallback or show error
+      if (process.env.VITE_SUPABASE_URL) {
+          const text = await processAudioRecording(recordedBlob);
+          setTranscription(text);
+      } else {
+          // Fallback for local testing without backend/supabase
+          setUploadProgress("Geen backend geconfigureerd. Gebruik lokale verwerking...");
+          const text = await transcribeAudioDirect(recordedBlob);
+          setTranscription(text);
+      }
+      
       setStatus(RecordingState.COMPLETED);
+      setUploadProgress("");
     } catch (err: any) {
-      setErrorMsg("Fout bij transcriberen: " + err.message);
+      console.error(err);
+      setErrorMsg("Fout: " + err.message);
       setStatus(RecordingState.ERROR);
+      setUploadProgress("");
     }
   };
 
@@ -191,25 +192,30 @@ const Recorder: React.FC = () => {
     setTranscription(null);
     setRecordedBlob(null);
     setErrorMsg(null);
+    setUploadProgress("");
   };
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       
-      {/* Header / Instructions */}
       <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
-        <h2 className="text-xl font-bold text-sky-400 mb-4">Hoe werkt dit?</h2>
-        <ol className="list-decimal list-inside text-slate-300 space-y-2 text-sm">
-          <li>Klik op <span className="font-semibold text-white">Start Opname</span>.</li>
-          <li>Geef toegang tot je <span className="font-semibold text-white">microfoon</span> (voor jouw stem).</li>
-          <li>Selecteer het <span className="font-semibold text-white">tabblad of scherm</span> van je vergadering.</li>
-          <li><strong className="text-sky-300">BELANGRIJK:</strong> Vink <strong>"Systeemgeluid delen"</strong> aan.</li>
-          <li>Werkt ook perfect met <span className="font-semibold text-white">oortjes/koptelefoon</span> (geluid wordt digitaal opgenomen).</li>
-          <li className="text-emerald-400">Tip: De audio wordt stereo opgenomen (Links = Jij, Rechts = Vergadering) voor betere herkenning.</li>
+        <h2 className="text-xl font-bold text-sky-400 mb-4">Hoe neem je op?</h2>
+        <ol className="list-decimal list-inside text-slate-300 space-y-3 text-sm">
+          <li>
+            Klik op <span className="font-semibold text-white">Start Opname</span>. Er verschijnt een browser-popup.
+          </li>
+          <li className="pl-2 border-l-2 border-sky-500/30 ml-2">
+            <strong>Belangrijk:</strong> Kies het tabblad <span className="text-sky-300">Hele scherm</span> (Entire Screen) of <span className="text-sky-300">Tabblad</span>.
+            <br/>
+            <span className="text-red-400 text-xs uppercase font-bold tracking-wider">Kies geen venster</span> (Window), want dan werkt het geluid niet.
+          </li>
+          <li>
+            Zet het vinkje <strong className="text-emerald-400">Systeemgeluid delen</strong> (linksonder in popup) AAN.
+          </li>
+          <li>Kies daarna je microfoon als daarom wordt gevraagd.</li>
         </ol>
       </div>
 
-      {/* Visualizer & Controls */}
       <div className="bg-slate-800 rounded-xl p-8 shadow-2xl border border-slate-700 flex flex-col items-center space-y-6">
         
         <div className="w-full relative">
@@ -248,7 +254,6 @@ const Recorder: React.FC = () => {
             </div>
         )}
 
-        {/* Post-Recording Actions */}
         {recordedBlob && status !== RecordingState.RECORDING && !transcription && (
              <div className="animate-fade-in flex flex-col items-center gap-4">
                 <p className="text-slate-400 text-sm">Opname voltooid ({Math.round(recordedBlob.size / 1024)} KB)</p>
@@ -263,17 +268,19 @@ const Recorder: React.FC = () => {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <span>Analyseren per spreker...</span>
+                            <span>{uploadProgress || "Analyseren..."}</span>
                         </>
                     ) : (
                         <span>Transcribeer Audio</span>
                     )}
                 </button>
+                {status === RecordingState.PROCESSING && (
+                  <p className="text-xs text-slate-500 animate-pulse">Dit kan even duren bij lange gesprekken...</p>
+                )}
              </div>
         )}
       </div>
 
-      {/* Result Area */}
       {transcription && (
         <div className="bg-slate-800 rounded-xl p-8 shadow-xl border border-slate-700 animate-slide-up">
             <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
