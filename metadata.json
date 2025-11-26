@@ -1,0 +1,7 @@
+{
+  "name": "Vergader Notulist",
+  "description": "Neem gesprekken op (Teams, Meet, Zoom) inclusief systeemgeluid en microfoon, en transcribeer ze met Gemini AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
