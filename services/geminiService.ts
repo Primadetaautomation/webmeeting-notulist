@@ -84,7 +84,26 @@ export const transcribeAudioDirect = async (audioBlob: Blob): Promise<string> =>
       contents: {
         parts: [
             { inlineData: { mimeType: audioBlob.type, data: base64Audio } },
-            { text: "Transcribeer dit gesprek. Links=Ik, Rechts=Anderen." }
+            { text: `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
+
+STEREO KANALEN:
+- LINKS = "Ik" (de opnemer)
+- RECHTS = Andere deelnemers (label als "Spreker 1", "Spreker 2" of gebruik namen indien genoemd)
+
+INSTRUCTIES:
+1. Corrigeer alle spelfouten en grammatica
+2. Maak de tekst vloeiend en leesbaar
+3. Gebruik consistente speaker labels
+4. Groepeer uitspraken per spreker
+
+FORMAT:
+**Ik:** [tekst]
+**[Spreker]:** [tekst]
+
+Eindig met:
+## Samenvatting
+## Actiepunten
+## Beslissingen` }
         ]
       }
     });

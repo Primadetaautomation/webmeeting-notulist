@@ -105,33 +105,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           },
           {
-            text: `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
+            text: `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
 
-BELANGRIJK VOOR SPREKER IDENTIFICATIE:
-De audio is opgenomen in stereo:
-- LINKER KANAAL: De hoofdgebruiker ('Ik').
-- RECHTER KANAAL: De vergadering ('Deelnemers').
+## AUDIO KANALEN (BELANGRIJK!)
+De audio is opgenomen in STEREO:
+- **LINKER KANAAL** = De gebruiker die opneemt (label: "Ik" of gebruik de naam als die genoemd wordt)
+- **RECHTER KANAAL** = De andere deelnemers aan de vergadering/call
 
-Instructies:
-1. Gebruik stereokanalen voor sprekeridentificatie.
-2. Formatteer als script:
-   **Ik:** ...
-   **Deelnemer:** ...
-3. Groepeer per spreker waar mogelijk (niet elke zin apart).
-4. Eindig ALTIJD met:
+## SPREKERHERKENNING
+1. Identificeer ALLE unieke sprekers op basis van:
+   - Stereokanaal (links vs rechts)
+   - Stemkenmerken (toonhoogte, spreekstijl)
+   - Context uit het gesprek (namen die genoemd worden)
+2. Geef elke spreker een consistente label:
+   - "**Ik:**" voor de persoon op het linker kanaal
+   - "**[Naam]:**" als een naam genoemd wordt
+   - "**Spreker 1:**", "**Spreker 2:**" etc. voor onbekende deelnemers
+3. Wissel NOOIT willekeurig van label voor dezelfde persoon
+
+## TRANSCRIPTIE KWALITEIT
+1. **Spelling & Grammatica:** Corrigeer alle spelfouten en grammaticale fouten. Schrijf correcte Nederlandse zinnen.
+2. **Leesbaarheid:** Maak de tekst vloeiend en goed leesbaar. Verwijder "uhm", "eh" tenzij relevant.
+3. **Context:** Behoud de volledige betekenis en context van wat er gezegd wordt.
+4. **Structuur:** Groepeer uitspraken van dezelfde spreker samen (niet elke zin apart).
+
+## OUTPUT FORMAAT
+
+### Transcriptie
+
+**Ik:** [Wat de gebruiker zegt, netjes geformuleerd]
+
+**[Spreker]:** [Wat de andere persoon zegt, netjes geformuleerd]
+
+[etc.]
+
+---
 
 ## Samenvatting
-[Korte samenvatting van het gesprek in 2-3 zinnen]
+[Bondige samenvatting van het gesprek in 2-4 zinnen: wat was het onderwerp en wat is de uitkomst]
 
 ## Actiepunten
-- [Actiepunt 1]
-- [Actiepunt 2]
-- etc.
+- [ ] [Concreet actiepunt met wie verantwoordelijk is indien bekend]
+- [ ] [Volgend actiepunt]
 
 ## Beslissingen
-- [Beslissing 1]
-- [Beslissing 2]
-- etc.`
+- [Beslissing die genomen is]
+- [Volgende beslissing]
+
+## Deelnemers
+- [Lijst van geïdentificeerde deelnemers indien bekend]
+
+---
+*Transcriptie gegenereerd door Vergader Notulist AI*`
           }
         ]
       }
