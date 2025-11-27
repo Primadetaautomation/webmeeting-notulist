@@ -57,6 +57,13 @@ interface RecorderProps {
   onSave?: (content: string, durationSeconds?: number) => Promise<void>;
 }
 
+// Bell/Notification Icon
+const BellIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+  </svg>
+);
+
 const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [status, setStatus] = useState<RecordingState>(RecordingState.IDLE);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -67,6 +74,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
+  const [notifyParticipants, setNotifyParticipants] = useState<boolean>(true);
 
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -75,6 +83,39 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingStartTimeRef = useRef<number | null>(null);
+
+  /**
+   * Play audio notification to inform participants about the recording
+   * Uses Web Speech Synthesis API for cross-platform compatibility
+   */
+  const playRecordingNotification = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!notifyParticipants) {
+        resolve();
+        return;
+      }
+
+      // Use Speech Synthesis for the notification
+      if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(
+          'Let op: dit gesprek wordt opgenomen. Alleen audio, geen beeld.'
+        );
+        utterance.lang = 'nl-NL';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve(); // Continue even if speech fails
+
+        window.speechSynthesis.speak(utterance);
+      } else {
+        // Fallback: just resolve if speech synthesis not available
+        console.warn('Speech synthesis not available');
+        resolve();
+      }
+    });
+  }, [notifyParticipants]);
 
   const stopStreams = useCallback(() => {
     if (micStreamRef.current) {
@@ -189,6 +230,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       recordingStartTimeRef.current = Date.now();
       setStatus(RecordingState.RECORDING);
 
+      // Play notification after recording starts (so it's captured in the recording)
+      playRecordingNotification();
+
     } catch (err: any) {
       console.error(err);
       stopStreams();
@@ -297,6 +341,32 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
             </li>
           ))}
         </ol>
+      </div>
+
+      {/* Recording Notification Toggle */}
+      <div className="card p-4">
+        <label className="flex items-center justify-between cursor-pointer">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary-500/20 rounded-lg flex items-center justify-center text-primary-400">
+              <BellIcon />
+            </div>
+            <div>
+              <span className="text-sm font-medium text-surface-200">Deelnemers informeren</span>
+              <p className="text-xs text-surface-500">
+                Speelt melding af: "Dit gesprek wordt opgenomen (alleen audio)"
+              </p>
+            </div>
+          </div>
+          <div className="relative">
+            <input
+              type="checkbox"
+              checked={notifyParticipants}
+              onChange={(e) => setNotifyParticipants(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-surface-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-surface-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+          </div>
+        </label>
       </div>
 
       {/* Main Recording Card */}
