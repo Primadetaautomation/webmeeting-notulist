@@ -48,12 +48,25 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
     });
 
     if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error || "Server error during transcription");
+      // Try to parse as JSON, fallback to text if not valid JSON
+      const responseText = await response.text();
+      let errorMessage = "Server error during transcription";
+      try {
+        const errData = JSON.parse(responseText);
+        errorMessage = errData.error || errorMessage;
+      } catch {
+        errorMessage = responseText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
 
-    const result = await response.json();
-    return result.text;
+    const responseText = await response.text();
+    try {
+      const result = JSON.parse(responseText);
+      return result.text;
+    } catch {
+      throw new Error("Ongeldige response van server: " + responseText.substring(0, 100));
+    }
 
   } catch (err) {
     console.error("API Error:", err);
