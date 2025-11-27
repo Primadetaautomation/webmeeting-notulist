@@ -7,7 +7,7 @@ import path from 'path';
 import os from 'os';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 
 // Middleware
 app.use(cors());
