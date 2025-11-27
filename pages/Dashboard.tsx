@@ -35,6 +35,12 @@ const LogOutIcon = () => (
   </svg>
 );
 
+const ArrowLeftIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+  </svg>
+);
+
 const DownloadIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -166,7 +172,11 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ transcription, on
   );
 };
 
-export const Dashboard: React.FC = () => {
+interface DashboardProps {
+  onBack?: () => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
   const { user, signOut } = useAuth();
   const { transcriptions, loading, error, deleteTranscription } = useTranscriptions();
 
@@ -184,6 +194,15 @@ export const Dashboard: React.FC = () => {
       <header className="glass border-b border-surface-800 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-2 -ml-2 rounded-lg text-surface-400 hover:text-white hover:bg-surface-800 transition-colors"
+                title="Terug naar opname"
+              >
+                <ArrowLeftIcon />
+              </button>
+            )}
             <DocumentIcon />
             <h1 className="font-semibold text-white">Mijn Transcripties</h1>
           </div>

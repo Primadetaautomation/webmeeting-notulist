@@ -61,19 +61,7 @@ const AppContent: React.FC = () => {
 
   // Show dashboard
   if (currentPage === 'dashboard') {
-    return (
-      <div>
-        <Dashboard />
-        {/* Floating button to go back to recorder */}
-        <button
-          onClick={() => setCurrentPage('recorder')}
-          className="fixed bottom-20 right-4 btn-primary shadow-lg"
-        >
-          <MicrophoneIcon />
-          <span>Nieuwe Opname</span>
-        </button>
-      </div>
-    );
+    return <Dashboard onBack={() => setCurrentPage('recorder')} />;
   }
 
   // Save transcription handler
