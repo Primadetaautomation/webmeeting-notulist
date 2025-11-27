@@ -33,9 +33,12 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
     .from('recordings')
     .getPublicUrl(fileName);
 
-  // 3. Call Vercel Backend Function
+  // 3. Call Backend API (Railway or Vercel fallback)
+  const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+  const transcribeUrl = apiBaseUrl ? `${apiBaseUrl}/api/transcribe` : '/api/transcribe';
+
   try {
-    const response = await fetch('/api/transcribe', {
+    const response = await fetch(transcribeUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
