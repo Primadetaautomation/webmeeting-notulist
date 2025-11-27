@@ -14,3 +14,9 @@ export interface AudioVisualizerProps {
   stream: MediaStream | null;
   isRecording: boolean;
 }
+
+export interface Participant {
+  index: number;
+  name: string;
+  isRecorder: boolean;
+}

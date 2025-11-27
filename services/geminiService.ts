@@ -4,8 +4,9 @@
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { GoogleGenAI } from "@google/genai";
+import { Participant } from '../types';
 
-export const processAudioRecording = async (audioBlob: Blob): Promise<string> => {
+export const processAudioRecording = async (audioBlob: Blob, participants?: Participant[]): Promise<string> => {
   // 1. Check if Supabase is available
   if (!supabase) {
     throw new Error("Supabase is niet geconfigureerd. Voeg VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY toe aan je .env bestand of gebruik de lokale modus.");
@@ -39,9 +40,10 @@ export const processAudioRecording = async (audioBlob: Blob): Promise<string> =>
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         fileUrl: publicUrl,
-        mimeType: audioBlob.type 
+        mimeType: audioBlob.type,
+        participants: participants || []
       }),
     });
 
@@ -64,13 +66,13 @@ export const processAudioRecording = async (audioBlob: Blob): Promise<string> =>
  * Still useful for local testing if API keys are exposed
  */
 
-export const transcribeAudioDirect = async (audioBlob: Blob): Promise<string> => {
+export const transcribeAudioDirect = async (audioBlob: Blob, participants?: Participant[]): Promise<string> => {
     // Robust check for API Key
     // Guidelines require using process.env.API_KEY exclusively
     if (!process.env.API_KEY) throw new Error("API Key ontbreekt. Zorg voor een API_KEY environment variable.");
-    
+
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
+
     // Convert blob to base64
     const reader = new FileReader();
     const base64Promise = new Promise<string>((resolve) => {
@@ -79,26 +81,41 @@ export const transcribeAudioDirect = async (audioBlob: Blob): Promise<string> =>
     });
     const base64Audio = await base64Promise;
 
+    // Build participant info for the prompt
+    let participantInfo = '';
+    if (participants && participants.length > 0) {
+      const participantLines = participants.map(p => {
+        const displayName = p.name.trim() || `Spreker ${p.index}`;
+        const channel = p.isRecorder ? 'LINKS' : 'RECHTS';
+        const role = p.isRecorder ? ' (opnemer)' : '';
+        return `- "${displayName}"${role} (${channel})`;
+      });
+      participantInfo = `
+DEELNEMERS (${participants.length} personen):
+${participantLines.join('\n')}
+GEBRUIK DEZE EXACTE NAMEN!
+`;
+    }
+
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         parts: [
             { inlineData: { mimeType: audioBlob.type, data: base64Audio } },
             { text: `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
-
+${participantInfo}
 STEREO KANALEN:
-- LINKS = "Ik" (de opnemer)
-- RECHTS = Andere deelnemers (label als "Spreker 1", "Spreker 2" of gebruik namen indien genoemd)
+- LINKS = De opnemer
+- RECHTS = Andere deelnemers
 
 INSTRUCTIES:
 1. Corrigeer alle spelfouten en grammatica
 2. Maak de tekst vloeiend en leesbaar
-3. Gebruik consistente speaker labels
+3. Gebruik de opgegeven namen als speaker labels (of "Spreker 1", "Spreker 2" als geen namen bekend)
 4. Groepeer uitspraken per spreker
 
 FORMAT:
-**Ik:** [tekst]
-**[Spreker]:** [tekst]
+**[Naam/Spreker]:** [tekst]
 
 Eindig met:
 ## Samenvatting

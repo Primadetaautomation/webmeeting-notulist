@@ -18,10 +18,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { fileUrl, mimeType } = req.body;
+  const { fileUrl, mimeType, participants } = req.body;
 
   if (!fileUrl) {
     return res.status(400).json({ error: 'Missing fileUrl' });
+  }
+
+  // Build participant info for the prompt
+  let participantPromptSection = '';
+  if (participants && Array.isArray(participants) && participants.length > 0) {
+    const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
+      const displayName = p.name.trim() || `Spreker ${p.index}`;
+      const channel = p.isRecorder ? 'LINKER kanaal' : 'RECHTER kanaal';
+      const role = p.isRecorder ? ' (de opnemer)' : '';
+      return `- "${displayName}"${role} (${channel})`;
+    });
+
+    const otherParticipantsCount = participants.filter((p: { isRecorder: boolean }) => !p.isRecorder).length;
+
+    participantPromptSection = `
+## DEELNEMERS INFORMATIE (BELANGRIJK!)
+Er zijn ${participants.length} deelnemers in dit gesprek:
+${participantLines.join('\n')}
+
+**GEBRUIK DEZE EXACTE NAMEN als speaker labels!**
+Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsCount}.
+`;
   }
 
   const apiKey = process.env.API_KEY;
@@ -106,10 +128,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           {
             text: `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
-
+${participantPromptSection}
 ## AUDIO KANALEN (BELANGRIJK!)
 De audio is opgenomen in STEREO:
-- **LINKER KANAAL** = De gebruiker die opneemt (label: "Ik" of gebruik de naam als die genoemd wordt)
+- **LINKER KANAAL** = De gebruiker die opneemt
 - **RECHTER KANAAL** = De andere deelnemers aan de vergadering/call
 
 ## SPREKERHERKENNING
@@ -118,9 +140,8 @@ De audio is opgenomen in STEREO:
    - Stemkenmerken (toonhoogte, spreekstijl)
    - Context uit het gesprek (namen die genoemd worden)
 2. Geef elke spreker een consistente label:
-   - "**Ik:**" voor de persoon op het linker kanaal
-   - "**[Naam]:**" als een naam genoemd wordt
-   - "**Spreker 1:**", "**Spreker 2:**" etc. voor onbekende deelnemers
+   - Gebruik de opgegeven namen als die beschikbaar zijn (zie DEELNEMERS INFORMATIE hierboven)
+   - Anders: "**Spreker 1:**", "**Spreker 2:**" etc. voor onbekende deelnemers
 3. Wissel NOOIT willekeurig van label voor dezelfde persoon
 
 ## TRANSCRIPTIE KWALITEIT
@@ -133,9 +154,9 @@ De audio is opgenomen in STEREO:
 
 ### Transcriptie
 
-**Ik:** [Wat de gebruiker zegt, netjes geformuleerd]
+**[Naam/Spreker]:** [Wat de persoon zegt, netjes geformuleerd]
 
-**[Spreker]:** [Wat de andere persoon zegt, netjes geformuleerd]
+**[Naam/Spreker]:** [Wat de andere persoon zegt, netjes geformuleerd]
 
 [etc.]
 
@@ -153,7 +174,7 @@ De audio is opgenomen in STEREO:
 - [Volgende beslissing]
 
 ## Deelnemers
-- [Lijst van geïdentificeerde deelnemers indien bekend]
+- [Lijst van geïdentificeerde deelnemers]
 
 ---
 *Transcriptie gegenereerd door Vergader Notulist AI*`

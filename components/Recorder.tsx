@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { RecordingState } from '../types';
+import { RecordingState, Participant } from '../types';
 import { processAudioRecording, transcribeAudioDirect } from '../services/geminiService';
 import AudioVisualizer from './AudioVisualizer';
 import ReactMarkdown from 'react-markdown';
@@ -64,6 +64,13 @@ const BellIcon = () => (
   </svg>
 );
 
+// Users Icon
+const UsersIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+  </svg>
+);
+
 const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [status, setStatus] = useState<RecordingState>(RecordingState.IDLE);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -75,6 +82,13 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [saved, setSaved] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
   const [notifyParticipants, setNotifyParticipants] = useState<boolean>(true);
+
+  // Participant configuration for speaker diarization
+  const [participantCount, setParticipantCount] = useState<number>(2);
+  const [participants, setParticipants] = useState<Participant[]>([
+    { index: 1, name: '', isRecorder: true },
+    { index: 2, name: '', isRecorder: false }
+  ]);
 
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -133,6 +147,30 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       audioContextRef.current = null;
     }
     setMixedStream(null);
+  }, []);
+
+  // Handle participant count change
+  const handleParticipantCountChange = useCallback((newCount: number) => {
+    setParticipantCount(newCount);
+    setParticipants(prev => {
+      const newParticipants: Participant[] = [];
+      for (let i = 1; i <= newCount; i++) {
+        const existing = prev.find(p => p.index === i);
+        newParticipants.push({
+          index: i,
+          name: existing?.name || '',
+          isRecorder: i === 1
+        });
+      }
+      return newParticipants;
+    });
+  }, []);
+
+  // Handle participant name change
+  const handleParticipantNameChange = useCallback((index: number, name: string) => {
+    setParticipants(prev => prev.map(p =>
+      p.index === index ? { ...p, name } : p
+    ));
   }, []);
 
   const startRecording = async () => {
@@ -257,10 +295,10 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     try {
       let text: string;
       if (process.env.VITE_SUPABASE_URL) {
-        text = await processAudioRecording(recordedBlob);
+        text = await processAudioRecording(recordedBlob, participants);
       } else {
         setUploadProgress("Lokale verwerking...");
-        text = await transcribeAudioDirect(recordedBlob);
+        text = await transcribeAudioDirect(recordedBlob, participants);
       }
 
       setTranscription(text);
@@ -341,6 +379,62 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
             </li>
           ))}
         </ol>
+      </div>
+
+      {/* Participant Configuration */}
+      <div className="card p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 bg-accent-500/20 rounded-lg flex items-center justify-center text-accent-400">
+            <UsersIcon />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-surface-200">Deelnemers</h3>
+            <p className="text-xs text-surface-500">
+              Voeg namen toe voor betere sprekerherkenning
+            </p>
+          </div>
+        </div>
+
+        {/* Participant count selector */}
+        <div className="mb-4">
+          <label className="block text-xs text-surface-400 mb-2">
+            Aantal deelnemers (inclusief jezelf)
+          </label>
+          <select
+            value={participantCount}
+            onChange={(e) => handleParticipantCountChange(Number(e.target.value))}
+            className="w-full bg-surface-700 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-200 focus:outline-none focus:ring-2 focus:ring-accent-500/50 focus:border-accent-500"
+          >
+            {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+              <option key={num} value={num}>{num} deelnemers</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Participant name inputs */}
+        <div className="space-y-3">
+          {participants.map((participant) => (
+            <div key={participant.index} className="flex items-center gap-3">
+              <span className="flex-shrink-0 w-6 h-6 bg-surface-700 rounded-full flex items-center justify-center text-xs font-bold text-surface-400">
+                {participant.index}
+              </span>
+              <input
+                type="text"
+                value={participant.name}
+                onChange={(e) => handleParticipantNameChange(participant.index, e.target.value)}
+                placeholder={participant.isRecorder ? "Jouw naam" : `Deelnemer ${participant.index}`}
+                className="flex-1 bg-surface-700 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500/50 focus:border-accent-500"
+              />
+              {participant.isRecorder && (
+                <span className="text-xs text-accent-400 flex-shrink-0">(jij)</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-3 text-xs text-surface-500">
+          Lege velden worden automatisch genummerd (Spreker 1, Spreker 2, etc.)
+        </p>
       </div>
 
       {/* Recording Notification Toggle */}
