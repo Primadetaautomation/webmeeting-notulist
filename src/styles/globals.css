@@ -149,8 +149,20 @@
   @apply text-surface-100 font-semibold;
 }
 
+.prose-custom h1 {
+  @apply text-xl border-b border-surface-700 pb-2 mb-4;
+}
+
+.prose-custom h2 {
+  @apply text-lg mt-6 mb-3 text-primary-400;
+}
+
+.prose-custom h3 {
+  @apply text-base mt-4 mb-2 text-accent-400;
+}
+
 .prose-custom p {
-  @apply text-surface-300;
+  @apply text-surface-300 mb-4 leading-relaxed;
 }
 
 .prose-custom strong {
@@ -159,7 +171,15 @@
 
 .prose-custom ul,
 .prose-custom ol {
-  @apply text-surface-300;
+  @apply text-surface-300 space-y-2 my-4;
+}
+
+.prose-custom li {
+  @apply pl-1;
+}
+
+.prose-custom li::marker {
+  @apply text-primary-400;
 }
 
 .prose-custom code {
@@ -171,9 +191,24 @@
 }
 
 .prose-custom blockquote {
-  @apply border-l-primary-500 text-surface-400 italic;
+  @apply border-l-primary-500 text-surface-400 italic pl-4 my-4;
 }
 
 .prose-custom a {
   @apply text-primary-400 hover:text-primary-300 transition-colors;
+}
+
+/* Speaker/timestamp formatting for transcriptions */
+.prose-custom p strong:first-child {
+  @apply text-primary-300 font-semibold;
+}
+
+/* Better spacing between transcript sections */
+.prose-custom hr {
+  @apply border-surface-700 my-6;
+}
+
+/* Timestamps in transcripts */
+.prose-custom em {
+  @apply text-surface-500 text-sm not-italic;
 }

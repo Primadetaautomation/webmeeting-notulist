@@ -100,7 +100,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Check if we have hash params from OAuth callback
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
-        console.log('[AuthContext] OAuth callback detected, processing tokens...');
+        console.log('[AuthContext] Processing OAuth callback...');
 
         // Parse hash params and set session manually
         const hashParams = new URLSearchParams(hash.substring(1));
@@ -116,7 +116,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (error) {
             console.error('[AuthContext] Failed to set session from hash:', error);
           } else if (data.session) {
-            console.log('[AuthContext] Session set from OAuth callback:', data.session.user.email);
+            console.log('[AuthContext] Session set from OAuth callback');
             setSession(data.session);
             setUser(data.session.user as User);
           }
@@ -137,7 +137,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (currentSession) {
-        console.log('[AuthContext] Session found:', currentSession.user.email);
+        console.log('[AuthContext] Session found');
         setSession(currentSession);
         setUser(currentSession.user as User);
       } else {

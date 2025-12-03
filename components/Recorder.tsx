@@ -81,7 +81,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
-  const [notifyParticipants, setNotifyParticipants] = useState<boolean>(true);
+  const [notifyParticipants, setNotifyParticipants] = useState<boolean>(false);
 
   // Participant configuration for speaker diarization
   const [participantCount, setParticipantCount] = useState<number>(2);
@@ -364,21 +364,62 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           <span className="w-8 h-8 bg-accent-500/20 rounded-lg flex items-center justify-center text-accent-400">?</span>
           Hoe werkt het?
         </h2>
-        <ol className="space-y-3 text-sm">
-          {[
-            { step: 1, text: <>Klik op <span className="text-white font-medium">Start Opname</span> — een browser popup verschijnt</> },
-            { step: 2, text: <>Kies <span className="text-accent-400 font-medium">Hele scherm</span> of <span className="text-accent-400 font-medium">Tabblad</span> (niet Venster!)</> },
-            { step: 3, text: <>Zet <span className="text-success-400 font-medium">Systeemgeluid delen</span> AAN (linksonder)</> },
-            { step: 4, text: <>Start je meeting en neem op — stop wanneer je klaar bent</> },
-          ].map(({ step, text }) => (
-            <li key={step} className="flex items-start gap-3 text-surface-300">
-              <span className="flex-shrink-0 w-6 h-6 bg-surface-700 rounded-full flex items-center justify-center text-xs font-bold text-surface-400">
-                {step}
-              </span>
-              <span className="pt-0.5">{text}</span>
-            </li>
-          ))}
-        </ol>
+
+        {/* Browser-based meetings */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-surface-200 mb-3 flex items-center gap-2">
+            <span className="w-5 h-5 bg-primary-500/20 rounded flex items-center justify-center text-primary-400 text-xs">🌐</span>
+            Via browser (Teams/Zoom/Meet in browser)
+          </h3>
+          <ol className="space-y-2 text-sm ml-7">
+            {[
+              { step: 1, text: <>Klik op <span className="text-white font-medium">Start Opname</span> — een browser popup verschijnt</> },
+              { step: 2, text: <>Kies <span className="text-accent-400 font-medium">Hele scherm</span> of <span className="text-accent-400 font-medium">Tabblad</span> (niet Venster!)</> },
+              { step: 3, text: <>Zet <span className="text-success-400 font-medium">Systeemgeluid delen</span> AAN (linksonder)</> },
+              { step: 4, text: <>Start je meeting en neem op — stop wanneer je klaar bent</> },
+            ].map(({ step, text }) => (
+              <li key={step} className="flex items-start gap-3 text-surface-300">
+                <span className="flex-shrink-0 w-5 h-5 bg-surface-700 rounded-full flex items-center justify-center text-xs font-bold text-surface-400">
+                  {step}
+                </span>
+                <span className="pt-0.5">{text}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Desktop app meetings */}
+        <div className="p-4 bg-surface-700/50 rounded-lg border border-surface-600">
+          <h3 className="text-sm font-medium text-surface-200 mb-3 flex items-center gap-2">
+            <span className="w-5 h-5 bg-accent-500/20 rounded flex items-center justify-center text-accent-400 text-xs">💻</span>
+            Via desktop app (Teams/Zoom app)
+          </h3>
+          <div className="space-y-3 text-sm text-surface-300">
+            <p>
+              Als je Teams of Zoom via de <span className="text-accent-400 font-medium">desktop app</span> gebruikt:
+            </p>
+            <ol className="space-y-2 ml-4">
+              <li className="flex items-start gap-2">
+                <span className="text-accent-400 font-bold">1.</span>
+                <span>Klik <span className="text-white font-medium">Start Opname</span> en kies <span className="text-accent-400 font-medium">Hele scherm</span></span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-accent-400 font-bold">2.</span>
+                <span>Vink <span className="text-success-400 font-medium">Systeemgeluid delen</span> AAN — dit vangt het geluid van de app</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-accent-400 font-bold">3.</span>
+                <span>Zorg dat je <span className="text-white font-medium">speakers/luidsprekers</span> gebruikt (geen oortjes!) zodat de microfoon je stem ook opneemt</span>
+              </li>
+            </ol>
+            <div className="mt-3 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg">
+              <p className="text-primary-300 text-xs">
+                <span className="font-semibold">💡 Tip:</span> Gebruik je oortjes/headset? Zet het gesprek dan via de browser
+                (teams.microsoft.com of zoom.us) voor de beste kwaliteit.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Participant Configuration */}
