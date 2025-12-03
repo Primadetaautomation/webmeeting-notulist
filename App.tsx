@@ -4,6 +4,8 @@ import { useTranscriptions } from './hooks/useTranscriptions';
 import Recorder from './components/Recorder';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 
 // Icons
 const MicrophoneIcon = () => (
@@ -37,7 +39,7 @@ const LogOutIcon = () => (
   </svg>
 );
 
-type Page = 'recorder' | 'dashboard';
+type Page = 'recorder' | 'dashboard' | 'privacy' | 'terms';
 
 // Main App Content (needs auth context)
 const AppContent: React.FC = () => {
@@ -62,6 +64,16 @@ const AppContent: React.FC = () => {
   // Show dashboard
   if (currentPage === 'dashboard') {
     return <Dashboard onBack={() => setCurrentPage('recorder')} />;
+  }
+
+  // Show privacy policy
+  if (currentPage === 'privacy') {
+    return <PrivacyPolicy onBack={() => setCurrentPage('recorder')} />;
+  }
+
+  // Show terms of service
+  if (currentPage === 'terms') {
+    return <TermsOfService onBack={() => setCurrentPage('recorder')} />;
   }
 
   // Save transcription handler
@@ -183,7 +195,22 @@ const AppContent: React.FC = () => {
       {/* Footer */}
       <footer className="fixed bottom-0 left-0 right-0 glass border-t border-surface-800 py-3 z-40">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between text-xs text-surface-500">
-          <span>© 2024 Vergader Notulist AI</span>
+          <div className="flex items-center gap-3">
+            <span>© 2024 Vergader Notulist AI</span>
+            <span className="text-surface-700">|</span>
+            <button
+              onClick={() => setCurrentPage('privacy')}
+              className="hover:text-primary-400 transition-colors"
+            >
+              Privacy
+            </button>
+            <button
+              onClick={() => setCurrentPage('terms')}
+              className="hover:text-primary-400 transition-colors"
+            >
+              Voorwaarden
+            </button>
+          </div>
           <div className="flex items-center gap-4">
             <a
               href="mailto:rick@primautomation.com?subject=Feedback%20Vergader%20Notulist&body=Beschrijf%20hier%20je%20feedback%20of%20suggestie%3A%0A%0A"
@@ -194,9 +221,9 @@ const AppContent: React.FC = () => {
               </svg>
               Feedback
             </a>
-            <span className="flex items-center gap-1.5">
+            <span className="hidden sm:flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-success-500 rounded-full" />
-              Je transcripties worden veilig opgeslagen
+              Veilig opgeslagen
             </span>
           </div>
         </div>

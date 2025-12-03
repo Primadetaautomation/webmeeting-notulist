@@ -12,10 +12,15 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
     throw new Error("Supabase is niet geconfigureerd. Voeg VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY toe aan je .env bestand of gebruik de lokale modus.");
   }
 
-  // 1. Upload to Supabase Storage
-  // Make sure you created a public bucket named 'recordings' in Supabase
-  const fileName = `meeting-${uuidv4()}.webm`;
-  
+  // Get current user for secure file path
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("Je moet ingelogd zijn om audio te uploaden.");
+  }
+
+  // Upload to user-specific folder for RLS security: {user_id}/{filename}
+  const fileName = `${user.id}/meeting-${uuidv4()}.webm`;
+
   const { data, error } = await supabase.storage
     .from('recordings')
     .upload(fileName, audioBlob, {
@@ -28,10 +33,17 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
     throw new Error("Fout bij uploaden naar opslag: " + error.message);
   }
 
-  // 2. Get Public URL
-  const { data: { publicUrl } } = supabase.storage
+  // 2. Get Signed URL (expires in 1 hour - enough for transcription)
+  const { data: signedData, error: signedError } = await supabase.storage
     .from('recordings')
-    .getPublicUrl(fileName);
+    .createSignedUrl(fileName, 3600); // 1 hour expiry
+
+  if (signedError || !signedData?.signedUrl) {
+    console.error("Signed URL Error:", signedError);
+    throw new Error("Fout bij genereren van beveiligde URL");
+  }
+
+  const fileUrl = signedData.signedUrl;
 
   // 3. Call Backend API (Railway or Vercel fallback)
   const apiBaseUrl = import.meta.env.VITE_API_URL || '';
@@ -44,7 +56,7 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        fileUrl: publicUrl,
+        fileUrl: fileUrl,
         mimeType: audioBlob.type,
         participants: participants || []
       }),

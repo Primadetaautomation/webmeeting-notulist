@@ -95,8 +95,12 @@ CREATE INDEX idx_transcriptions_created_at ON transcriptions(created_at DESC);
 1. Ga naar **Storage** in Supabase
 2. Klik op **"New Bucket"**
 3. Naam: `recordings`
-4. Zet **Public bucket** AAN
+4. Zet **Public bucket** UIT (PRIVATE voor beveiliging)
 5. Klik **Create bucket**
+6. Run de storage policies migration:
+```sql
+-- Voer supabase/migrations/002_storage_policies.sql uit in de SQL Editor
+```
 
 #### 2.4 Google OAuth configureren
 
