@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranscriptions } from '../hooks/useTranscriptions';
 import { Transcription } from '../types/database';
 import ReactMarkdown from 'react-markdown';
+import LanguageSelector from '../components/LanguageSelector';
 
 // Icons
 const TrashIcon = () => (
@@ -65,13 +67,14 @@ interface TranscriptionCardProps {
 }
 
 const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ transcription, onDelete }) => {
+  const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('nl-NL', {
+    return date.toLocaleDateString(i18n.language === 'nl' ? 'nl-NL' : 'en-US', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -96,7 +99,7 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ transcription, on
     const a = document.createElement('a');
     a.href = url;
     const dateStr = new Date(transcription.created_at).toISOString().split('T')[0];
-    a.download = `notulen-${dateStr}.md`;
+    a.download = `notes-${dateStr}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -129,14 +132,14 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ transcription, on
           <button
             onClick={handleCopy}
             className="p-2 rounded-lg transition-colors text-surface-500 hover:text-primary-400 hover:bg-primary-500/10"
-            title={copied ? 'Gekopieerd!' : 'Kopieer naar klembord'}
+            title={copied ? t('recorder.copied') : t('dashboard.copyToClipboard')}
           >
             {copied ? <CheckIcon /> : <CopyIcon />}
           </button>
           <button
             onClick={handleDownload}
             className="p-2 rounded-lg transition-colors text-surface-500 hover:text-accent-400 hover:bg-accent-500/10"
-            title="Download als Markdown"
+            title={t('dashboard.downloadAsMarkdown')}
           >
             <DownloadIcon />
           </button>
@@ -150,7 +153,7 @@ const TranscriptionCard: React.FC<TranscriptionCardProps> = ({ transcription, on
                 ? 'bg-error-500 text-white'
                 : 'text-surface-500 hover:text-error-400 hover:bg-error-500/10'
             }`}
-            title={confirmDelete ? 'Klik nogmaals om te verwijderen' : 'Verwijderen'}
+            title={confirmDelete ? t('dashboard.confirmDelete') : t('dashboard.delete')}
           >
             <TrashIcon />
           </button>
@@ -177,6 +180,7 @@ interface DashboardProps {
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const { transcriptions, loading, error, deleteTranscription } = useTranscriptions();
 
@@ -198,16 +202,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
               <button
                 onClick={onBack}
                 className="p-2 -ml-2 rounded-lg text-surface-400 hover:text-white hover:bg-surface-800 transition-colors"
-                title="Terug naar opname"
+                title={t('dashboard.backToRecording')}
               >
                 <ArrowLeftIcon />
               </button>
             )}
             <DocumentIcon />
-            <h1 className="font-semibold text-white">Mijn Transcripties</h1>
+            <h1 className="font-semibold text-white">{t('dashboard.title')}</h1>
           </div>
 
           <div className="flex items-center gap-4">
+            <LanguageSelector variant="buttons" />
             <span className="text-sm text-surface-400 hidden sm:block">
               {user?.email}
             </span>
@@ -216,7 +221,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
               className="btn-ghost text-surface-400 hover:text-white"
             >
               <LogOutIcon />
-              <span className="hidden sm:inline">Uitloggen</span>
+              <span className="hidden sm:inline">{t('nav.logout')}</span>
             </button>
           </div>
         </div>
@@ -227,7 +232,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
         {/* Stats */}
         <div className="mb-8">
           <div className="badge-primary">
-            {transcriptions.length} transcriptie{transcriptions.length !== 1 ? 's' : ''}
+            {t('dashboard.transcriptionCount', { count: transcriptions.length })}
           </div>
         </div>
 
@@ -251,9 +256,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ onBack }) => {
             <div className="w-16 h-16 bg-surface-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <DocumentIcon />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">Nog geen transcripties</h3>
+            <h3 className="text-lg font-medium text-white mb-2">{t('dashboard.noTranscriptions')}</h3>
             <p className="text-surface-400 mb-6">
-              Maak een nieuwe opname om je eerste transcriptie te genereren
+              {t('dashboard.noTranscriptionsDesc')}
             </p>
           </div>
         )}

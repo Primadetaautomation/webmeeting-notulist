@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { RecordingState, Participant } from '../types';
 import { processAudioRecording, transcribeAudioDirect } from '../services/geminiService';
 import AudioVisualizer from './AudioVisualizer';
@@ -71,7 +72,15 @@ const UsersIcon = () => (
   </svg>
 );
 
+// Globe Icon for language
+const GlobeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+  </svg>
+);
+
 const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
+  const { t, i18n } = useTranslation();
   const [status, setStatus] = useState<RecordingState>(RecordingState.IDLE);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [transcription, setTranscription] = useState<string | null>(null);
@@ -82,6 +91,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const [saved, setSaved] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState<number>(0);
   const [notifyParticipants, setNotifyParticipants] = useState<boolean>(false);
+
+  // Transcription language (separate from UI language)
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState<'en' | 'nl'>('nl');
 
   // Participant configuration for speaker diarization
   const [participantCount, setParticipantCount] = useState<number>(2);
@@ -111,10 +123,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
 
       // Use Speech Synthesis for the notification
       if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(
-          'Let op: dit gesprek wordt opgenomen. Alleen audio, geen beeld.'
-        );
-        utterance.lang = 'nl-NL';
+        const message = t('notificationAudio.message');
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang = transcriptionLanguage === 'nl' ? 'nl-NL' : 'en-US';
         utterance.rate = 0.9;
         utterance.pitch = 1;
         utterance.volume = 1;
@@ -129,7 +140,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         resolve();
       }
     });
-  }, [notifyParticipants]);
+  }, [notifyParticipants, transcriptionLanguage, t]);
 
   const stopStreams = useCallback(() => {
     if (micStreamRef.current) {
@@ -202,7 +213,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         const micSource = ctx.createMediaStreamSource(micStream);
         micSource.connect(merger, 0, 0);
       } catch (err) {
-        throw new Error("Geen toegang tot microfoon. Controleer je browser instellingen.");
+        throw new Error(t('errors.microphoneAccess'));
       }
 
       // Get System Audio (via Screen Share)
@@ -217,13 +228,13 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         });
         screenStreamRef.current = screenStream;
       } catch (err) {
-        throw new Error("Opname geannuleerd. Je MOET 'Systeemgeluid delen' aanvinken.");
+        throw new Error(t('errors.recordingCancelled'));
       }
 
       const sysAudioTrack = screenStream.getAudioTracks()[0];
       if (!sysAudioTrack) {
         stopStreams();
-        throw new Error("Geen systeemgeluid gedetecteerd! Kies 'Hele Scherm' en vink 'Audio delen' aan.");
+        throw new Error(t('errors.noSystemAudio'));
       }
 
       const sysSource = ctx.createMediaStreamSource(screenStream);
@@ -274,7 +285,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     } catch (err: any) {
       console.error(err);
       stopStreams();
-      setErrorMsg(err.message || "Er is een onbekende fout opgetreden.");
+      setErrorMsg(err.message || t('errors.unknownError'));
       setStatus(RecordingState.ERROR);
     }
   };
@@ -289,16 +300,16 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     if (!recordedBlob) return;
 
     setStatus(RecordingState.PROCESSING);
-    setUploadProgress("Uploaden naar server...");
+    setUploadProgress(t('recorder.uploadingToServer'));
     setSaved(false);
 
     try {
       let text: string;
       if (process.env.VITE_SUPABASE_URL) {
-        text = await processAudioRecording(recordedBlob, participants);
+        text = await processAudioRecording(recordedBlob, participants, transcriptionLanguage);
       } else {
-        setUploadProgress("Lokale verwerking...");
-        text = await transcribeAudioDirect(recordedBlob, participants);
+        setUploadProgress(t('recorder.localProcessing'));
+        text = await transcribeAudioDirect(recordedBlob, participants, transcriptionLanguage);
       }
 
       setTranscription(text);
@@ -308,7 +319,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       // Auto-save transcription if onSave prop is provided
       if (onSave && text) {
         try {
-          setUploadProgress("Opslaan...");
+          setUploadProgress(t('recorder.saving'));
           await onSave(text, recordingDuration > 0 ? recordingDuration : undefined);
           setSaved(true);
           setUploadProgress("");
@@ -319,7 +330,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       }
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Fout: " + err.message);
+      setErrorMsg(t('errors.transcriptionError', { message: err.message }));
       setStatus(RecordingState.ERROR);
       setUploadProgress("");
     }
@@ -349,7 +360,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `notulen-${new Date().toISOString().split('T')[0]}.md`;
+      a.download = `notes-${new Date().toISOString().split('T')[0]}.md`;
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -362,27 +373,31 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       <div className="card p-6">
         <h2 className="text-lg font-semibold text-accent-400 mb-4 flex items-center gap-2">
           <span className="w-8 h-8 bg-accent-500/20 rounded-lg flex items-center justify-center text-accent-400">?</span>
-          Hoe werkt het?
+          {t('recorder.howItWorks')}
         </h2>
 
         {/* Browser-based meetings */}
         <div className="mb-6">
           <h3 className="text-sm font-medium text-surface-200 mb-3 flex items-center gap-2">
             <span className="w-5 h-5 bg-primary-500/20 rounded flex items-center justify-center text-primary-400 text-xs">🌐</span>
-            Via browser (Teams/Zoom/Meet in browser)
+            {t('recorder.browserMeetings')}
           </h3>
           <ol className="space-y-2 text-sm ml-7">
             {[
-              { step: 1, text: <>Klik op <span className="text-white font-medium">Start Opname</span> — een browser popup verschijnt</> },
-              { step: 2, text: <>Kies <span className="text-accent-400 font-medium">Hele scherm</span> of <span className="text-accent-400 font-medium">Tabblad</span> (niet Venster!)</> },
-              { step: 3, text: <>Zet <span className="text-success-400 font-medium">Systeemgeluid delen</span> AAN (linksonder)</> },
-              { step: 4, text: <>Start je meeting en neem op — stop wanneer je klaar bent</> },
-            ].map(({ step, text }) => (
+              { step: 1, textKey: 'recorder.step1' },
+              { step: 2, textKey: 'recorder.step2' },
+              { step: 3, textKey: 'recorder.step3' },
+              { step: 4, textKey: 'recorder.step4' },
+            ].map(({ step, textKey }) => (
               <li key={step} className="flex items-start gap-3 text-surface-300">
                 <span className="flex-shrink-0 w-5 h-5 bg-surface-700 rounded-full flex items-center justify-center text-xs font-bold text-surface-400">
                   {step}
                 </span>
-                <span className="pt-0.5">{text}</span>
+                <span className="pt-0.5">
+                  <Trans i18nKey={textKey}>
+                    Step text with <span className="text-white font-medium">highlighted</span> parts
+                  </Trans>
+                </span>
               </li>
             ))}
           </ol>
@@ -392,33 +407,71 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         <div className="p-4 bg-surface-700/50 rounded-lg border border-surface-600">
           <h3 className="text-sm font-medium text-surface-200 mb-3 flex items-center gap-2">
             <span className="w-5 h-5 bg-accent-500/20 rounded flex items-center justify-center text-accent-400 text-xs">💻</span>
-            Via desktop app (Teams/Zoom app)
+            {t('recorder.desktopMeetings')}
           </h3>
           <div className="space-y-3 text-sm text-surface-300">
             <p>
-              Als je Teams of Zoom via de <span className="text-accent-400 font-medium">desktop app</span> gebruikt:
+              <Trans i18nKey="recorder.desktopInstructions">
+                If you use Teams or Zoom via the <span className="text-accent-400 font-medium">desktop app</span>:
+              </Trans>
             </p>
             <ol className="space-y-2 ml-4">
               <li className="flex items-start gap-2">
                 <span className="text-accent-400 font-bold">1.</span>
-                <span>Klik <span className="text-white font-medium">Start Opname</span> en kies <span className="text-accent-400 font-medium">Hele scherm</span></span>
+                <span>
+                  <Trans i18nKey="recorder.desktopStep1">
+                    Click <span className="text-white font-medium">Start Recording</span> and choose <span className="text-accent-400 font-medium">Entire screen</span>
+                  </Trans>
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-accent-400 font-bold">2.</span>
-                <span>Vink <span className="text-success-400 font-medium">Systeemgeluid delen</span> AAN — dit vangt het geluid van de app</span>
+                <span>
+                  <Trans i18nKey="recorder.desktopStep2">
+                    Check <span className="text-success-400 font-medium">Share system audio</span> ON
+                  </Trans>
+                </span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-accent-400 font-bold">3.</span>
-                <span>Zorg dat je <span className="text-white font-medium">speakers/luidsprekers</span> gebruikt (geen oortjes!) zodat de microfoon je stem ook opneemt</span>
+                <span>
+                  <Trans i18nKey="recorder.desktopStep3">
+                    Make sure you use <span className="text-white font-medium">speakers</span> (not earbuds!)
+                  </Trans>
+                </span>
               </li>
             </ol>
             <div className="mt-3 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg">
               <p className="text-primary-300 text-xs">
-                <span className="font-semibold">💡 Tip:</span> Gebruik je oortjes/headset? Zet het gesprek dan via de browser
-                (teams.microsoft.com of zoom.us) voor de beste kwaliteit.
+                <span className="font-semibold">💡 Tip:</span> {t('recorder.desktopTip')}
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Transcription Language Selector */}
+      <div className="card p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-accent-500/20 rounded-lg flex items-center justify-center text-accent-400">
+              <GlobeIcon />
+            </div>
+            <div>
+              <span className="text-sm font-medium text-surface-200">{t('recorder.transcriptionLanguage')}</span>
+              <p className="text-xs text-surface-500">
+                {t('recorder.transcriptionLanguageDesc')}
+              </p>
+            </div>
+          </div>
+          <select
+            value={transcriptionLanguage}
+            onChange={(e) => setTranscriptionLanguage(e.target.value as 'en' | 'nl')}
+            className="bg-surface-700 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-200 focus:outline-none focus:ring-2 focus:ring-accent-500/50 focus:border-accent-500"
+          >
+            <option value="nl">{t('languages.nl')}</option>
+            <option value="en">{t('languages.en')}</option>
+          </select>
         </div>
       </div>
 
@@ -429,9 +482,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
             <UsersIcon />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-surface-200">Deelnemers</h3>
+            <h3 className="text-sm font-medium text-surface-200">{t('recorder.participants')}</h3>
             <p className="text-xs text-surface-500">
-              Voeg namen toe voor betere sprekerherkenning
+              {t('recorder.participantsDesc')}
             </p>
           </div>
         </div>
@@ -439,7 +492,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         {/* Participant count selector */}
         <div className="mb-4">
           <label className="block text-xs text-surface-400 mb-2">
-            Aantal deelnemers (inclusief jezelf)
+            {t('recorder.participantCount')}
           </label>
           <select
             value={participantCount}
@@ -447,7 +500,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
             className="w-full bg-surface-700 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-200 focus:outline-none focus:ring-2 focus:ring-accent-500/50 focus:border-accent-500"
           >
             {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-              <option key={num} value={num}>{num} deelnemers</option>
+              <option key={num} value={num}>{num}</option>
             ))}
           </select>
         </div>
@@ -463,18 +516,18 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
                 type="text"
                 value={participant.name}
                 onChange={(e) => handleParticipantNameChange(participant.index, e.target.value)}
-                placeholder={participant.isRecorder ? "Jouw naam" : `Deelnemer ${participant.index}`}
+                placeholder={participant.isRecorder ? t('recorder.yourName') : t('recorder.participantPlaceholder', { index: participant.index })}
                 className="flex-1 bg-surface-700 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-200 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500/50 focus:border-accent-500"
               />
               {participant.isRecorder && (
-                <span className="text-xs text-accent-400 flex-shrink-0">(jij)</span>
+                <span className="text-xs text-accent-400 flex-shrink-0">{t('recorder.you')}</span>
               )}
             </div>
           ))}
         </div>
 
         <p className="mt-3 text-xs text-surface-500">
-          Lege velden worden automatisch genummerd (Spreker 1, Spreker 2, etc.)
+          {t('recorder.participantsNote')}
         </p>
       </div>
 
@@ -486,9 +539,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
               <BellIcon />
             </div>
             <div>
-              <span className="text-sm font-medium text-surface-200">Deelnemers informeren</span>
+              <span className="text-sm font-medium text-surface-200">{t('recorder.notifyParticipants')}</span>
               <p className="text-xs text-surface-500">
-                Speelt melding af: "Dit gesprek wordt opgenomen (alleen audio)"
+                {t('recorder.notifyDesc')}
               </p>
             </div>
           </div>
@@ -512,7 +565,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           {status === RecordingState.RECORDING && (
             <div className="absolute top-3 right-3 recording-indicator">
               <span className="recording-dot" />
-              <span className="text-xs font-mono text-error-200 uppercase tracking-wider">Opname</span>
+              <span className="text-xs font-mono text-error-200 uppercase tracking-wider">{t('recorder.recording')}</span>
             </div>
           )}
         </div>
@@ -522,12 +575,12 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           {status === RecordingState.IDLE || status === RecordingState.ERROR || (status === RecordingState.COMPLETED && !transcription) ? (
             <button onClick={startRecording} className="btn-primary">
               <MicIcon />
-              <span>{recordedBlob ? "Nieuwe Opname" : "Start Opname"}</span>
+              <span>{recordedBlob ? t('recorder.newRecording') : t('recorder.startRecording')}</span>
             </button>
           ) : status === RecordingState.RECORDING ? (
             <button onClick={stopRecording} className="btn-danger">
               <StopIcon />
-              <span>Stop Opname</span>
+              <span>{t('recorder.stopRecording')}</span>
             </button>
           ) : null}
 
@@ -542,10 +595,13 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           {recordedBlob && status !== RecordingState.RECORDING && !transcription && (
             <div className="flex flex-col items-center gap-4 animate-fade-in">
               <p className="text-surface-400 text-sm">
-                Opname voltooid ({Math.round(recordedBlob.size / 1024)} KB)
+                {t('recorder.recordingComplete', { size: Math.round(recordedBlob.size / 1024) })}
                 {recordingDuration > 0 && (
                   <span className="ml-2">
-                    - {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')} min
+                    - {t('recorder.duration', {
+                      minutes: Math.floor(recordingDuration / 60),
+                      seconds: (recordingDuration % 60).toString().padStart(2, '0')
+                    })}
                   </span>
                 )}
               </p>
@@ -560,18 +616,18 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>{uploadProgress || "Analyseren..."}</span>
+                    <span>{uploadProgress || t('recorder.analyzing')}</span>
                   </>
                 ) : (
                   <>
                     <SparklesIcon />
-                    <span>Transcribeer met AI</span>
+                    <span>{t('recorder.transcribeWithAI')}</span>
                   </>
                 )}
               </button>
               {status === RecordingState.PROCESSING && (
                 <p className="text-xs text-surface-500 animate-pulse">
-                  Dit kan 30-60 seconden duren bij lange gesprekken...
+                  {t('recorder.processingTime')}
                 </p>
               )}
             </div>
@@ -587,12 +643,12 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold text-success-400 flex items-center gap-2">
                 <CheckIcon />
-                Transcriptie & Samenvatting
+                {t('recorder.transcriptionSummary')}
               </h3>
               {saved && (
                 <span className="badge-primary flex items-center gap-1">
                   <SaveIcon />
-                  <span>Opgeslagen</span>
+                  <span>{t('recorder.saved')}</span>
                 </span>
               )}
             </div>
@@ -600,23 +656,23 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
               <button
                 onClick={copyToClipboard}
                 className="btn-ghost"
-                title="Kopieer naar klembord"
+                title={t('recorder.copyToClipboard')}
               >
                 {copied ? <CheckIcon /> : <CopyIcon />}
-                <span className="hidden sm:inline">{copied ? 'Gekopieerd!' : 'Kopieer'}</span>
+                <span className="hidden sm:inline">{copied ? t('recorder.copied') : t('recorder.copy')}</span>
               </button>
               <button
                 onClick={downloadAsMarkdown}
                 className="btn-ghost"
-                title="Download als Markdown"
+                title={t('recorder.downloadAsMarkdown')}
               >
                 <DownloadIcon />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden sm:inline">{t('recorder.download')}</span>
               </button>
               <button
                 onClick={reset}
                 className="btn-ghost"
-                title="Begin opnieuw"
+                title={t('recorder.startOver')}
               >
                 <RefreshIcon />
               </button>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { useTranscriptions } from './hooks/useTranscriptions';
 import Recorder from './components/Recorder';
@@ -6,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import LanguageSelector from './components/LanguageSelector';
 
 // Icons
 const MicrophoneIcon = () => (
@@ -18,12 +20,6 @@ const MicrophoneIcon = () => (
 const SparklesIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
     <path fillRule="evenodd" d="M9 4.5a.75.75 0 01.721.544l.813 2.846a3.75 3.75 0 002.576 2.576l2.846.813a.75.75 0 010 1.442l-2.846.813a3.75 3.75 0 00-2.576 2.576l-.813 2.846a.75.75 0 01-1.442 0l-.813-2.846a3.75 3.75 0 00-2.576-2.576l-2.846-.813a.75.75 0 010-1.442l2.846-.813A3.75 3.75 0 007.466 7.89l.813-2.846A.75.75 0 019 4.5zM18 1.5a.75.75 0 01.728.568l.258 1.036c.236.94.97 1.674 1.91 1.91l1.036.258a.75.75 0 010 1.456l-1.036.258c-.94.236-1.674.97-1.91 1.91l-.258 1.036a.75.75 0 01-1.456 0l-.258-1.036a2.625 2.625 0 00-1.91-1.91l-1.036-.258a.75.75 0 010-1.456l1.036-.258a2.625 2.625 0 001.91-1.91l.258-1.036A.75.75 0 0118 1.5z" clipRule="evenodd" />
-  </svg>
-);
-
-const UserIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
   </svg>
 );
 
@@ -43,6 +39,7 @@ type Page = 'recorder' | 'dashboard' | 'privacy' | 'terms';
 
 // Main App Content (needs auth context)
 const AppContent: React.FC = () => {
+  const { t } = useTranslation();
   const { user, loading, initialized, signOut } = useAuth();
   const { transcriptions, createTranscription } = useTranscriptions();
   const [currentPage, setCurrentPage] = useState<Page>('recorder');
@@ -107,8 +104,8 @@ const AppContent: React.FC = () => {
               <MicrophoneIcon />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gradient">Vergader Notulist</h1>
-              <p className="text-xs text-surface-500 -mt-0.5">AI-powered transcriptie</p>
+              <h1 className="text-lg font-bold text-gradient">{t('app.name')}</h1>
+              <p className="text-xs text-surface-500 -mt-0.5">{t('app.tagline')}</p>
             </div>
           </div>
 
@@ -118,13 +115,16 @@ const AppContent: React.FC = () => {
               <span>Gemini 2.5</span>
             </div>
 
+            {/* Language Selector */}
+            <LanguageSelector variant="buttons" />
+
             {/* My Transcriptions Button */}
             <button
               onClick={() => setCurrentPage('dashboard')}
               className="btn-ghost relative"
             >
               <FolderIcon />
-              <span className="hidden sm:inline">Mijn Transcripties</span>
+              <span className="hidden sm:inline">{t('nav.myTranscriptions')}</span>
               {transcriptions.length > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary-500 rounded-full text-xs flex items-center justify-center">
                   {transcriptions.length}
@@ -137,7 +137,7 @@ const AppContent: React.FC = () => {
               <span className="text-sm text-surface-400 hidden md:block truncate max-w-32">
                 {user.email}
               </span>
-              <button onClick={signOut} className="btn-ghost" title="Uitloggen">
+              <button onClick={signOut} className="btn-ghost" title={t('nav.logout')}>
                 <LogOutIcon />
               </button>
             </div>
@@ -151,19 +151,19 @@ const AppContent: React.FC = () => {
           <div className="max-w-4xl mx-auto text-center">
             <div className="inline-flex items-center gap-2 bg-surface-800/50 border border-surface-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
-              <span className="text-sm text-surface-400">Ingelogd als {user.email?.split('@')[0]}</span>
+              <span className="text-sm text-surface-400">{t('hero.loggedInAs', { name: user.email?.split('@')[0] })}</span>
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight mb-6">
-              <span className="text-white">Vergeet nooit meer</span>
+              <span className="text-white">{t('hero.title1')}</span>
               <br />
-              <span className="text-gradient-hero">wat er gezegd is</span>
+              <span className="text-gradient-hero">{t('hero.title2')}</span>
             </h1>
 
             <p className="text-lg sm:text-xl text-surface-400 max-w-2xl mx-auto leading-relaxed">
-              Neem Teams, Google Meet of Zoom gesprekken op — zelfs met oortjes in —
-              en krijg direct een <span className="text-accent-400 font-medium">transcriptie</span> en
-              <span className="text-accent-400 font-medium"> samenvatting</span>.
+              <Trans i18nKey="hero.description">
+                Record Teams, Google Meet or Zoom calls — even with earbuds — and instantly get a <span className="text-accent-400 font-medium">transcription</span> and <span className="text-accent-400 font-medium">summary</span>.
+              </Trans>
             </p>
           </div>
         </section>
@@ -172,17 +172,17 @@ const AppContent: React.FC = () => {
         <section className="px-4 mb-12">
           <div className="max-w-3xl mx-auto flex flex-wrap justify-center gap-3">
             {[
-              { icon: '🎤', text: 'Microfoon + Systeemgeluid' },
-              { icon: '🔊', text: 'Stereo Spraakherkenning' },
-              { icon: '📝', text: 'Auto Samenvatting' },
-              { icon: '💾', text: 'Automatisch Opslaan' },
+              { icon: '🎤', textKey: 'features.micAndSystem' },
+              { icon: '🔊', textKey: 'features.stereoSpeaker' },
+              { icon: '📝', textKey: 'features.autoSummary' },
+              { icon: '💾', textKey: 'features.autoSave' },
             ].map((feature, i) => (
               <div
                 key={i}
                 className="flex items-center gap-2 bg-surface-800/50 border border-surface-700/50 rounded-full px-4 py-2 text-sm"
               >
                 <span>{feature.icon}</span>
-                <span className="text-surface-300">{feature.text}</span>
+                <span className="text-surface-300">{t(feature.textKey)}</span>
               </div>
             ))}
           </div>
@@ -196,34 +196,34 @@ const AppContent: React.FC = () => {
       <footer className="fixed bottom-0 left-0 right-0 glass border-t border-surface-800 py-3 z-40">
         <div className="max-w-7xl mx-auto px-4 flex items-center justify-between text-xs text-surface-500">
           <div className="flex items-center gap-3">
-            <span>© 2024 Vergader Notulist AI</span>
+            <span>© {t('app.copyright')}</span>
             <span className="text-surface-700">|</span>
             <button
               onClick={() => setCurrentPage('privacy')}
               className="hover:text-primary-400 transition-colors"
             >
-              Privacy
+              {t('nav.privacy')}
             </button>
             <button
               onClick={() => setCurrentPage('terms')}
               className="hover:text-primary-400 transition-colors"
             >
-              Voorwaarden
+              {t('nav.terms')}
             </button>
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="mailto:rick@primautomation.com?subject=Feedback%20Vergader%20Notulist&body=Beschrijf%20hier%20je%20feedback%20of%20suggestie%3A%0A%0A"
+              href="mailto:rick@primautomation.com?subject=Feedback%20Meeting%20Notes&body=Describe%20your%20feedback%20or%20suggestion%3A%0A%0A"
               className="flex items-center gap-1.5 hover:text-primary-400 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
               </svg>
-              Feedback
+              {t('nav.feedback')}
             </a>
             <span className="hidden sm:flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 bg-success-500 rounded-full" />
-              Veilig opgeslagen
+              {t('nav.safelyStored')}
             </span>
           </div>
         </div>

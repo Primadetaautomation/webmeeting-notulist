@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
+import LanguageSelector from '../components/LanguageSelector';
 
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -17,6 +19,7 @@ const MailIcon = () => (
 );
 
 export const LoginPage: React.FC = () => {
+  const { t } = useTranslation();
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, loading } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -29,7 +32,7 @@ export const LoginPage: React.FC = () => {
       setError(null);
       await signInWithGoogle();
     } catch (err: any) {
-      setError(err.message || 'Google login mislukt');
+      setError(err.message || t('errors.googleLoginFailed'));
     }
   };
 
@@ -41,18 +44,23 @@ export const LoginPage: React.FC = () => {
     try {
       if (isSignUp) {
         await signUpWithEmail(email, password);
-        setMessage('Check je email voor de bevestigingslink!');
+        setMessage(t('login.checkEmail'));
       } else {
         await signInWithEmail(email, password);
       }
     } catch (err: any) {
-      setError(err.message || 'Er is een fout opgetreden');
+      setError(err.message || t('errors.genericError'));
     }
   };
 
   return (
     <div className="min-h-screen bg-surface-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
+        {/* Language Selector */}
+        <div className="flex justify-end mb-4">
+          <LanguageSelector variant="buttons" />
+        </div>
+
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-accent-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-500/20">
@@ -61,9 +69,9 @@ export const LoginPage: React.FC = () => {
               <path d="M6 10.5a.75.75 0 01.75.75v1.5a5.25 5.25 0 1010.5 0v-1.5a.75.75 0 011.5 0v1.5a6.751 6.751 0 01-6 6.709v2.291h3a.75.75 0 010 1.5h-7.5a.75.75 0 010-1.5h3v-2.291a6.751 6.751 0 01-6-6.709v-1.5A.75.75 0 016 10.5z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">Vergader Notulist AI</h1>
+          <h1 className="text-2xl font-bold text-white">{t('login.title')}</h1>
           <p className="text-surface-400 mt-2">
-            {isSignUp ? 'Maak een account aan' : 'Log in om je transcripties te beheren'}
+            {isSignUp ? t('login.signupDesc') : t('login.loginDesc')}
           </p>
         </div>
 
@@ -76,7 +84,7 @@ export const LoginPage: React.FC = () => {
             className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-medium py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
           >
             <GoogleIcon />
-            <span>Doorgaan met Google</span>
+            <span>{t('login.continueWithGoogle')}</span>
           </button>
 
           {/* Divider */}
@@ -85,7 +93,7 @@ export const LoginPage: React.FC = () => {
               <div className="w-full border-t border-surface-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-surface-800 text-surface-500">of</span>
+              <span className="px-2 bg-surface-800 text-surface-500">{t('login.or')}</span>
             </div>
           </div>
 
@@ -93,7 +101,7 @@ export const LoginPage: React.FC = () => {
           <form onSubmit={handleEmailSubmit} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-surface-300 mb-1">
-                Email
+                {t('login.email')}
               </label>
               <input
                 id="email"
@@ -101,14 +109,14 @@ export const LoginPage: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
-                placeholder="naam@email.com"
+                placeholder={t('login.emailPlaceholder')}
                 required
               />
             </div>
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-surface-300 mb-1">
-                Wachtwoord
+                {t('login.password')}
               </label>
               <input
                 id="password"
@@ -116,7 +124,7 @@ export const LoginPage: React.FC = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
-                placeholder="Minimaal 8 tekens"
+                placeholder={t('login.passwordPlaceholder')}
                 minLength={8}
                 required
               />
@@ -140,7 +148,7 @@ export const LoginPage: React.FC = () => {
               className="w-full btn-primary"
             >
               <MailIcon />
-              <span>{isSignUp ? 'Account aanmaken' : 'Inloggen'}</span>
+              <span>{isSignUp ? t('login.createAccount') : t('login.login')}</span>
             </button>
           </form>
 
@@ -154,7 +162,7 @@ export const LoginPage: React.FC = () => {
               }}
               className="text-sm text-surface-400 hover:text-white transition-colors"
             >
-              {isSignUp ? 'Heb je al een account? Log in' : 'Nog geen account? Registreer'}
+              {isSignUp ? t('login.haveAccount') : t('login.noAccount')}
             </button>
           </div>
         </div>

@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { fileUrl, mimeType, participants } = req.body;
+  const { fileUrl, mimeType, participants, language = 'nl' } = req.body;
 
   if (!fileUrl) {
     return res.status(400).json({ error: 'Missing fileUrl' });
@@ -27,16 +27,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Build participant info for the prompt
   let participantPromptSection = '';
   if (participants && Array.isArray(participants) && participants.length > 0) {
-    const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
-      const displayName = p.name.trim() || `Spreker ${p.index}`;
-      const channel = p.isRecorder ? 'LINKER kanaal' : 'RECHTER kanaal';
-      const role = p.isRecorder ? ' (de opnemer)' : '';
-      return `- "${displayName}"${role} (${channel})`;
-    });
-
     const otherParticipantsCount = participants.filter((p: { isRecorder: boolean }) => !p.isRecorder).length;
 
-    participantPromptSection = `
+    if (language === 'nl') {
+      const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
+        const displayName = p.name.trim() || `Spreker ${p.index}`;
+        const channel = p.isRecorder ? 'LINKER kanaal' : 'RECHTER kanaal';
+        const role = p.isRecorder ? ' (de opnemer)' : '';
+        return `- "${displayName}"${role} (${channel})`;
+      });
+
+      participantPromptSection = `
 ## DEELNEMERS INFORMATIE (BELANGRIJK!)
 Er zijn ${participants.length} deelnemers in dit gesprek:
 ${participantLines.join('\n')}
@@ -44,6 +45,23 @@ ${participantLines.join('\n')}
 **GEBRUIK DEZE EXACTE NAMEN als speaker labels!**
 Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsCount}.
 `;
+    } else {
+      const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
+        const displayName = p.name.trim() || `Speaker ${p.index}`;
+        const channel = p.isRecorder ? 'LEFT channel' : 'RIGHT channel';
+        const role = p.isRecorder ? ' (the recorder)' : '';
+        return `- "${displayName}"${role} (${channel})`;
+      });
+
+      participantPromptSection = `
+## PARTICIPANTS INFORMATION (IMPORTANT!)
+There are ${participants.length} participants in this conversation:
+${participantLines.join('\n')}
+
+**USE THESE EXACT NAMES as speaker labels!**
+The number of unique voices on the RIGHT channel is at most ${otherParticipantsCount}.
+`;
+    }
   }
 
   const apiKey = process.env.API_KEY;
@@ -116,18 +134,8 @@ Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsC
       throw new Error("Audio processing failed by Gemini.");
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          {
-            fileData: {
-              mimeType: uploadResult.file.mimeType,
-              fileUri: uploadResult.file.uri
-            }
-          },
-          {
-            text: `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
+    // Build the transcription prompt based on language
+    const promptNL = `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
 ${participantPromptSection}
 ## AUDIO KANALEN (BELANGRIJK!)
 De audio is opgenomen in STEREO:
@@ -177,7 +185,72 @@ De audio is opgenomen in STEREO:
 - [Lijst van geïdentificeerde deelnemers]
 
 ---
-*Transcriptie gegenereerd door Vergader Notulist AI*`
+*Transcriptie gegenereerd door Vergader Notulist AI*`;
+
+    const promptEN = `You are a professional, experienced meeting note-taker who transcribes meetings into perfect, readable documents.
+${participantPromptSection}
+## AUDIO CHANNELS (IMPORTANT!)
+The audio was recorded in STEREO:
+- **LEFT CHANNEL** = The user who is recording
+- **RIGHT CHANNEL** = The other meeting/call participants
+
+## SPEAKER RECOGNITION
+1. Identify ALL unique speakers based on:
+   - Stereo channel (left vs right)
+   - Voice characteristics (pitch, speaking style)
+   - Context from the conversation (names mentioned)
+2. Give each speaker a consistent label:
+   - Use the provided names if available (see PARTICIPANTS INFORMATION above)
+   - Otherwise: "**Speaker 1:**", "**Speaker 2:**" etc. for unknown participants
+3. NEVER randomly switch labels for the same person
+
+## TRANSCRIPTION QUALITY
+1. **Spelling & Grammar:** Correct all spelling and grammatical errors. Write proper English sentences.
+2. **Readability:** Make the text fluent and easy to read. Remove "um", "uh" unless relevant.
+3. **Context:** Preserve the full meaning and context of what is being said.
+4. **Structure:** Group statements from the same speaker together (not each sentence separately).
+
+## OUTPUT FORMAT
+
+### Transcription
+
+**[Name/Speaker]:** [What the person says, neatly formulated]
+
+**[Name/Speaker]:** [What the other person says, neatly formulated]
+
+[etc.]
+
+---
+
+## Summary
+[Brief summary of the conversation in 2-4 sentences: what was the topic and what is the outcome]
+
+## Action Items
+- [ ] [Specific action item with who is responsible if known]
+- [ ] [Next action item]
+
+## Decisions
+- [Decision that was made]
+- [Next decision]
+
+## Participants
+- [List of identified participants]
+
+---
+*Transcription generated by Meeting Notes AI*`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+          {
+            fileData: {
+              mimeType: uploadResult.file.mimeType,
+              fileUri: uploadResult.file.uri
+            }
+          },
+          {
+            text: language === 'nl' ? promptNL : promptEN
           }
         ]
       }

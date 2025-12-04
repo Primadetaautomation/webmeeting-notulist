@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GoogleGenAI } from "@google/genai";
 import { Participant } from '../types';
 
-export const processAudioRecording = async (audioBlob: Blob, participants?: Participant[]): Promise<string> => {
+export const processAudioRecording = async (audioBlob: Blob, participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
   // 1. Check if Supabase is available
   if (!supabase) {
     throw new Error("Supabase is niet geconfigureerd. Voeg VITE_SUPABASE_URL en VITE_SUPABASE_ANON_KEY toe aan je .env bestand of gebruik de lokale modus.");
@@ -58,7 +58,8 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
       body: JSON.stringify({
         fileUrl: fileUrl,
         mimeType: audioBlob.type,
-        participants: participants || []
+        participants: participants || [],
+        language: language
       }),
     });
 
@@ -94,10 +95,10 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
  * Still useful for local testing if API keys are exposed
  */
 
-export const transcribeAudioDirect = async (audioBlob: Blob, participants?: Participant[]): Promise<string> => {
+export const transcribeAudioDirect = async (audioBlob: Blob, participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
     // Robust check for API Key
     // Guidelines require using process.env.API_KEY exclusively
-    if (!process.env.API_KEY) throw new Error("API Key ontbreekt. Zorg voor een API_KEY environment variable.");
+    if (!process.env.API_KEY) throw new Error(language === 'nl' ? "API Key ontbreekt. Zorg voor een API_KEY environment variable." : "API Key missing. Please set API_KEY environment variable.");
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -109,28 +110,37 @@ export const transcribeAudioDirect = async (audioBlob: Blob, participants?: Part
     });
     const base64Audio = await base64Promise;
 
-    // Build participant info for the prompt
+    // Build participant info for the prompt based on language
     let participantInfo = '';
     if (participants && participants.length > 0) {
-      const participantLines = participants.map(p => {
-        const displayName = p.name.trim() || `Spreker ${p.index}`;
-        const channel = p.isRecorder ? 'LINKS' : 'RECHTS';
-        const role = p.isRecorder ? ' (opnemer)' : '';
-        return `- "${displayName}"${role} (${channel})`;
-      });
-      participantInfo = `
+      if (language === 'nl') {
+        const participantLines = participants.map(p => {
+          const displayName = p.name.trim() || `Spreker ${p.index}`;
+          const channel = p.isRecorder ? 'LINKS' : 'RECHTS';
+          const role = p.isRecorder ? ' (opnemer)' : '';
+          return `- "${displayName}"${role} (${channel})`;
+        });
+        participantInfo = `
 DEELNEMERS (${participants.length} personen):
 ${participantLines.join('\n')}
 GEBRUIK DEZE EXACTE NAMEN!
 `;
+      } else {
+        const participantLines = participants.map(p => {
+          const displayName = p.name.trim() || `Speaker ${p.index}`;
+          const channel = p.isRecorder ? 'LEFT' : 'RIGHT';
+          const role = p.isRecorder ? ' (recorder)' : '';
+          return `- "${displayName}"${role} (${channel})`;
+        });
+        participantInfo = `
+PARTICIPANTS (${participants.length} people):
+${participantLines.join('\n')}
+USE THESE EXACT NAMES!
+`;
+      }
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-            { inlineData: { mimeType: audioBlob.type, data: base64Audio } },
-            { text: `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
+    const promptNL = `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
 ${participantInfo}
 STEREO KANALEN:
 - LINKS = De opnemer
@@ -148,7 +158,34 @@ FORMAT:
 Eindig met:
 ## Samenvatting
 ## Actiepunten
-## Beslissingen` }
+## Beslissingen`;
+
+    const promptEN = `You are a professional meeting note-taker. Transcribe the audio accurately in English.
+${participantInfo}
+STEREO CHANNELS:
+- LEFT = The recorder
+- RIGHT = Other participants
+
+INSTRUCTIONS:
+1. Correct all spelling and grammar errors
+2. Make the text fluent and readable
+3. Use the provided names as speaker labels (or "Speaker 1", "Speaker 2" if no names known)
+4. Group statements by speaker
+
+FORMAT:
+**[Name/Speaker]:** [text]
+
+End with:
+## Summary
+## Action Items
+## Decisions`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: {
+        parts: [
+            { inlineData: { mimeType: audioBlob.type, data: base64Audio } },
+            { text: language === 'nl' ? promptNL : promptEN }
         ]
       }
     });
