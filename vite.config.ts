@@ -20,9 +20,21 @@ export default defineConfig(({ mode }) => {
       port: 3000,
       proxy: {
         '/api': {
-          target: 'http://localhost:3000', 
+          target: 'http://localhost:3000',
           changeOrigin: true,
           rewrite: (path) => path
+        }
+      }
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'react-vendor': ['react', 'react-dom'],
+            'markdown': ['react-markdown'],
+            'i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+            'supabase': ['@supabase/supabase-js']
+          }
         }
       }
     }
