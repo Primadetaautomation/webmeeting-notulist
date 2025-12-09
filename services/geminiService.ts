@@ -1,9 +1,10 @@
-// This service now orchestrates the upload to Supabase and calls the backend API
+// This service orchestrates the upload to Supabase and calls the backend API
 // It essentially acts as the "Client Logic" for the architecture.
+// NOTE: The transcribeAudioDirect function is a fallback for local development only.
+// Production always uses the server-side API with proper file uploads.
 
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
-import { GoogleGenAI } from "@google/genai";
 import { Participant } from '../types';
 
 export const processAudioRecording = async (audioBlob: Blob, participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
@@ -92,102 +93,16 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
 
 /**
  * Legacy Client-Side method (fallback if no backend is set up)
- * Still useful for local testing if API keys are exposed
+ * This is kept for local development only.
+ * WARNING: This uses inline data which only works for files < 20MB.
+ * Production should always use the server-side API.
  */
-
-export const transcribeAudioDirect = async (audioBlob: Blob, participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
-    // Robust check for API Key
-    // Guidelines require using process.env.API_KEY exclusively
-    if (!process.env.API_KEY) throw new Error(language === 'nl' ? "API Key ontbreekt. Zorg voor een API_KEY environment variable." : "API Key missing. Please set API_KEY environment variable.");
-
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-    // Convert blob to base64
-    const reader = new FileReader();
-    const base64Promise = new Promise<string>((resolve) => {
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(audioBlob);
-    });
-    const base64Audio = await base64Promise;
-
-    // Build participant info for the prompt based on language
-    let participantInfo = '';
-    if (participants && participants.length > 0) {
-      if (language === 'nl') {
-        const participantLines = participants.map(p => {
-          const displayName = p.name.trim() || `Spreker ${p.index}`;
-          const channel = p.isRecorder ? 'LINKS' : 'RECHTS';
-          const role = p.isRecorder ? ' (opnemer)' : '';
-          return `- "${displayName}"${role} (${channel})`;
-        });
-        participantInfo = `
-DEELNEMERS (${participants.length} personen):
-${participantLines.join('\n')}
-GEBRUIK DEZE EXACTE NAMEN!
-`;
-      } else {
-        const participantLines = participants.map(p => {
-          const displayName = p.name.trim() || `Speaker ${p.index}`;
-          const channel = p.isRecorder ? 'LEFT' : 'RIGHT';
-          const role = p.isRecorder ? ' (recorder)' : '';
-          return `- "${displayName}"${role} (${channel})`;
-        });
-        participantInfo = `
-PARTICIPANTS (${participants.length} people):
-${participantLines.join('\n')}
-USE THESE EXACT NAMES!
-`;
-      }
-    }
-
-    const promptNL = `Je bent een professionele notulist. Transcribeer de audio nauwkeurig in het Nederlands.
-${participantInfo}
-STEREO KANALEN:
-- LINKS = De opnemer
-- RECHTS = Andere deelnemers
-
-INSTRUCTIES:
-1. Corrigeer alle spelfouten en grammatica
-2. Maak de tekst vloeiend en leesbaar
-3. Gebruik de opgegeven namen als speaker labels (of "Spreker 1", "Spreker 2" als geen namen bekend)
-4. Groepeer uitspraken per spreker
-
-FORMAT:
-**[Naam/Spreker]:** [tekst]
-
-Eindig met:
-## Samenvatting
-## Actiepunten
-## Beslissingen`;
-
-    const promptEN = `You are a professional meeting note-taker. Transcribe the audio accurately in English.
-${participantInfo}
-STEREO CHANNELS:
-- LEFT = The recorder
-- RIGHT = Other participants
-
-INSTRUCTIONS:
-1. Correct all spelling and grammar errors
-2. Make the text fluent and readable
-3. Use the provided names as speaker labels (or "Speaker 1", "Speaker 2" if no names known)
-4. Group statements by speaker
-
-FORMAT:
-**[Name/Speaker]:** [text]
-
-End with:
-## Summary
-## Action Items
-## Decisions`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-            { inlineData: { mimeType: audioBlob.type, data: base64Audio } },
-            { text: language === 'nl' ? promptNL : promptEN }
-        ]
-      }
-    });
-    return response.text || "";
+export const transcribeAudioDirect = async (_audioBlob: Blob, _participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
+    // This function is deprecated in favor of server-side transcription
+    // The inline data approach has limitations and the SDK mixing caused issues
+    throw new Error(
+      language === 'nl'
+        ? "Directe transcriptie is uitgeschakeld. Configureer Supabase voor server-side transcriptie."
+        : "Direct transcription is disabled. Configure Supabase for server-side transcription."
+    );
 }

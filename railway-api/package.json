@@ -9,8 +9,7 @@
     "dev": "ts-node server.ts"
   },
   "dependencies": {
-    "@google/genai": "^0.14.0",
-    "@google/generative-ai": "^0.21.0",
+    "@google/genai": "^1.31.0",
     "cors": "^2.8.5",
     "express": "^4.21.0"
   },

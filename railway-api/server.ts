@@ -5,9 +5,13 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { GoogleGenAI, createUserContent, createPartFromUri } from '@google/genai';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Helper to wait
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Middleware
 app.use(cors());
@@ -20,7 +24,7 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // Transcribe endpoint
 app.post('/api/transcribe', async (req: Request, res: Response) => {
-  const { fileUrl, mimeType, participants } = req.body;
+  const { fileUrl, mimeType, participants, language = 'nl' } = req.body;
 
   if (!fileUrl) {
     return res.status(400).json({ error: 'Missing fileUrl' });
@@ -29,16 +33,17 @@ app.post('/api/transcribe', async (req: Request, res: Response) => {
   // Build participant info for the prompt
   let participantPromptSection = '';
   if (participants && Array.isArray(participants) && participants.length > 0) {
-    const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
-      const displayName = p.name.trim() || `Spreker ${p.index}`;
-      const channel = p.isRecorder ? 'LINKER kanaal' : 'RECHTER kanaal';
-      const role = p.isRecorder ? ' (de opnemer)' : '';
-      return `- "${displayName}"${role} (${channel})`;
-    });
-
     const otherParticipantsCount = participants.filter((p: { isRecorder: boolean }) => !p.isRecorder).length;
 
-    participantPromptSection = `
+    if (language === 'nl') {
+      const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
+        const displayName = p.name.trim() || `Spreker ${p.index}`;
+        const channel = p.isRecorder ? 'LINKER kanaal' : 'RECHTER kanaal';
+        const role = p.isRecorder ? ' (de opnemer)' : '';
+        return `- "${displayName}"${role} (${channel})`;
+      });
+
+      participantPromptSection = `
 ## DEELNEMERS INFORMATIE (BELANGRIJK!)
 Er zijn ${participants.length} deelnemers in dit gesprek:
 ${participantLines.join('\n')}
@@ -46,6 +51,23 @@ ${participantLines.join('\n')}
 **GEBRUIK DEZE EXACTE NAMEN als speaker labels!**
 Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsCount}.
 `;
+    } else {
+      const participantLines = participants.map((p: { index: number; name: string; isRecorder: boolean }) => {
+        const displayName = p.name.trim() || `Speaker ${p.index}`;
+        const channel = p.isRecorder ? 'LEFT channel' : 'RIGHT channel';
+        const role = p.isRecorder ? ' (the recorder)' : '';
+        return `- "${displayName}"${role} (${channel})`;
+      });
+
+      participantPromptSection = `
+## PARTICIPANTS INFORMATION (IMPORTANT!)
+There are ${participants.length} participants in this conversation:
+${participantLines.join('\n')}
+
+**USE THESE EXACT NAMES as speaker labels!**
+The number of unique voices on the RIGHT channel is at most ${otherParticipantsCount}.
+`;
+    }
   }
 
   const apiKey = process.env.API_KEY;
@@ -53,15 +75,14 @@ Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsC
     return res.status(500).json({ error: 'Server misconfiguration: API_KEY missing' });
   }
 
+  const tempFilePath = path.join(os.tmpdir(), `upload_${Date.now()}.webm`);
+
   try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const { GoogleAIFileManager } = await import('@google/generative-ai/server');
-
-    const tempFilePath = path.join(os.tmpdir(), `upload_${Date.now()}.webm`);
-
-    console.log(`[Transcribe] Downloading file from: ${fileUrl}`);
+    console.log('[Transcribe] Starting transcription process...');
+    console.log(`[Transcribe] File URL: ${fileUrl.substring(0, 100)}...`);
 
     // 1. Download file from Supabase URL to temp storage
+    console.log('[Transcribe] Downloading file from Supabase...');
     await new Promise<void>((resolve, reject) => {
       const file = fs.createWriteStream(tempFilePath);
       const protocol = fileUrl.startsWith('https') ? https : http;
@@ -74,8 +95,13 @@ Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsC
             reject(new Error('Redirect without location header'));
             return;
           }
+          console.log(`[Transcribe] Following redirect to: ${redirectUrl.substring(0, 100)}...`);
           const redirectProtocol = redirectUrl.startsWith('https') ? https : http;
           redirectProtocol.get(redirectUrl, (redirectResponse) => {
+            if (redirectResponse.statusCode !== 200) {
+              reject(new Error(`Failed to download file: HTTP ${redirectResponse.statusCode}`));
+              return;
+            }
             redirectResponse.pipe(file);
             file.on('finish', () => {
               file.close();
@@ -85,6 +111,8 @@ Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsC
             fs.unlink(tempFilePath, () => {});
             reject(err);
           });
+        } else if (response.statusCode !== 200) {
+          reject(new Error(`Failed to download file: HTTP ${response.statusCode}`));
         } else {
           response.pipe(file);
           file.on('finish', () => {
@@ -98,46 +126,54 @@ Het aantal unieke stemmen op het RECHTER kanaal is maximaal ${otherParticipantsC
       });
     });
 
+    // Verify file was downloaded
     const fileStats = fs.statSync(tempFilePath);
     console.log(`[Transcribe] Downloaded file size: ${(fileStats.size / 1024 / 1024).toFixed(2)} MB`);
 
-    // 2. Upload to Gemini File Manager
-    console.log('[Transcribe] Uploading to Gemini...');
-    const fileManager = new GoogleAIFileManager(apiKey);
-    const uploadResult = await fileManager.uploadFile(tempFilePath, {
-      mimeType: mimeType || 'audio/webm',
-      displayName: 'Meeting Recording',
-    });
+    if (fileStats.size === 0) {
+      throw new Error('Downloaded file is empty');
+    }
 
-    // 3. Generate Content using the File URI
+    // 2. Initialize Google GenAI with the new unified SDK
     const ai = new GoogleGenAI({ apiKey });
 
-    // Wait for the file to be active
-    console.log('[Transcribe] Waiting for Gemini to process file...');
-    let file = await fileManager.getFile(uploadResult.file.name);
-    while (file.state === 'PROCESSING') {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      file = await fileManager.getFile(uploadResult.file.name);
-      console.log(`[Transcribe] File state: ${file.state}`);
+    // 3. Upload file to Gemini using the Files API
+    console.log('[Transcribe] Uploading to Gemini Files API...');
+    const uploadedFile = await ai.files.upload({
+      file: tempFilePath,
+      config: {
+        mimeType: mimeType || 'audio/webm',
+        displayName: 'Meeting Recording'
+      },
+    });
+
+    console.log(`[Transcribe] File uploaded: ${uploadedFile.name}`);
+    console.log(`[Transcribe] Initial state: ${uploadedFile.state}`);
+
+    // 4. Wait for file to become ACTIVE
+    let fileInfo = await ai.files.get({ name: uploadedFile.name! });
+    let waitCount = 0;
+    const maxWait = 60; // Maximum 60 iterations (2 minutes with 2s intervals)
+
+    while (fileInfo.state === 'PROCESSING' && waitCount < maxWait) {
+      console.log(`[Transcribe] File state: ${fileInfo.state} (waiting ${waitCount * 2}s)...`);
+      await sleep(2000);
+      fileInfo = await ai.files.get({ name: uploadedFile.name! });
+      waitCount++;
     }
 
-    if (file.state === 'FAILED') {
-      throw new Error('Audio processing failed by Gemini.');
+    console.log(`[Transcribe] Final file state: ${fileInfo.state}`);
+
+    if (fileInfo.state === 'FAILED') {
+      throw new Error('Gemini failed to process the audio file. Please try again with a different recording.');
     }
 
-    console.log('[Transcribe] Starting transcription...');
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          {
-            fileData: {
-              mimeType: uploadResult.file.mimeType,
-              fileUri: uploadResult.file.uri
-            }
-          },
-          {
-            text: `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
+    if (fileInfo.state !== 'ACTIVE') {
+      throw new Error(`File processing timed out. State: ${fileInfo.state}`);
+    }
+
+    // 5. Build the transcription prompt
+    const promptNL = `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
 ${participantPromptSection}
 ## AUDIO KANALEN (BELANGRIJK!)
 De audio is opgenomen in STEREO:
@@ -187,23 +223,110 @@ De audio is opgenomen in STEREO:
 - [Lijst van geïdentificeerde deelnemers]
 
 ---
-*Transcriptie gegenereerd door Vergader Notulist AI*`
-          }
-        ]
-      }
+*Transcriptie gegenereerd door Vergader Notulist AI*`;
+
+    const promptEN = `You are a professional, experienced meeting note-taker who transcribes meetings into perfect, readable documents.
+${participantPromptSection}
+## AUDIO CHANNELS (IMPORTANT!)
+The audio was recorded in STEREO:
+- **LEFT CHANNEL** = The user who is recording
+- **RIGHT CHANNEL** = The other meeting/call participants
+
+## SPEAKER RECOGNITION
+1. Identify ALL unique speakers based on:
+   - Stereo channel (left vs right)
+   - Voice characteristics (pitch, speaking style)
+   - Context from the conversation (names mentioned)
+2. Give each speaker a consistent label:
+   - Use the provided names if available (see PARTICIPANTS INFORMATION above)
+   - Otherwise: "**Speaker 1:**", "**Speaker 2:**" etc. for unknown participants
+3. NEVER randomly switch labels for the same person
+
+## TRANSCRIPTION QUALITY
+1. **Spelling & Grammar:** Correct all spelling and grammatical errors. Write proper English sentences.
+2. **Readability:** Make the text fluent and easy to read. Remove "um", "uh" unless relevant.
+3. **Context:** Preserve the full meaning and context of what is being said.
+4. **Structure:** Group statements from the same speaker together (not each sentence separately).
+
+## OUTPUT FORMAT
+
+### Transcription
+
+**[Name/Speaker]:** [What the person says, neatly formulated]
+
+**[Name/Speaker]:** [What the other person says, neatly formulated]
+
+[etc.]
+
+---
+
+## Summary
+[Brief summary of the conversation in 2-4 sentences: what was the topic and what is the outcome]
+
+## Action Items
+- [ ] [Specific action item with who is responsible if known]
+- [ ] [Next action item]
+
+## Decisions
+- [Decision that was made]
+- [Next decision]
+
+## Participants
+- [List of identified participants]
+
+---
+*Transcription generated by Meeting Notes AI*`;
+
+    // 6. Generate transcription using the uploaded file
+    console.log('[Transcribe] Generating transcription...');
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: createUserContent([
+        createPartFromUri(fileInfo.uri!, fileInfo.mimeType!),
+        language === 'nl' ? promptNL : promptEN
+      ]),
     });
 
     console.log('[Transcribe] Transcription complete!');
 
-    // 4. Cleanup
-    await fileManager.deleteFile(uploadResult.file.name);
-    fs.unlink(tempFilePath, () => {});
+    // 7. Cleanup - delete from Gemini and local temp file
+    try {
+      await ai.files.delete({ name: uploadedFile.name! });
+      console.log('[Transcribe] Deleted file from Gemini');
+    } catch (deleteErr) {
+      console.warn('[Transcribe] Failed to delete file from Gemini:', deleteErr);
+    }
 
-    return res.status(200).json({ text: response.text });
+    fs.unlink(tempFilePath, (err) => {
+      if (err) console.warn('[Transcribe] Failed to delete temp file:', err);
+    });
+
+    const transcriptionText = response.text;
+
+    if (!transcriptionText) {
+      throw new Error('Gemini returned empty transcription');
+    }
+
+    return res.status(200).json({ text: transcriptionText });
 
   } catch (error: any) {
     console.error('[Transcribe] Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+
+    // Cleanup temp file on error
+    fs.unlink(tempFilePath, () => {});
+
+    // Provide more helpful error messages
+    let errorMessage = error.message || 'Internal Server Error';
+
+    if (errorMessage.includes('FAILED_PRECONDITION')) {
+      errorMessage = 'The audio file could not be processed. Please ensure the recording is valid and try again.';
+    } else if (errorMessage.includes('INVALID_ARGUMENT')) {
+      errorMessage = 'Invalid audio format. Please use a supported format (WebM, MP3, WAV, etc.)';
+    } else if (errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      errorMessage = 'API quota exceeded. Please try again later.';
+    }
+
+    return res.status(500).json({ error: errorMessage });
   }
 });
 
