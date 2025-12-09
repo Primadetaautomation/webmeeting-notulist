@@ -287,6 +287,33 @@ The audio was recorded in STEREO:
       ]),
     });
 
+    // Log the full response for debugging
+    console.log('[Transcribe] Response received, extracting text...');
+    console.log('[Transcribe] Response type:', typeof response);
+    console.log('[Transcribe] Response keys:', response ? Object.keys(response) : 'null');
+
+    // Try to get text from response - handle both getter and direct property
+    let transcriptionText: string | undefined;
+
+    try {
+      // The SDK uses a getter, so access it directly
+      transcriptionText = response.text;
+    } catch {
+      // Fallback to candidates structure
+      if (response.candidates && response.candidates[0]?.content?.parts?.[0]?.text) {
+        transcriptionText = response.candidates[0].content.parts[0].text;
+      }
+    }
+
+    console.log('[Transcribe] Transcription text length:', transcriptionText?.length || 0);
+    console.log('[Transcribe] Transcription preview:', transcriptionText?.substring(0, 200) || 'EMPTY');
+
+    if (!transcriptionText || transcriptionText.trim().length === 0) {
+      console.error('[Transcribe] Empty transcription received from Gemini');
+      console.error('[Transcribe] Full response:', JSON.stringify(response, null, 2).substring(0, 1000));
+      throw new Error('Gemini returned empty transcription. The audio may be silent or unprocessable.');
+    }
+
     console.log('[Transcribe] Transcription complete!');
 
     // 7. Cleanup - delete from Gemini and local temp file
@@ -300,12 +327,6 @@ The audio was recorded in STEREO:
     fs.unlink(tempFilePath, (err) => {
       if (err) console.warn('[Transcribe] Failed to delete temp file:', err);
     });
-
-    const transcriptionText = response.text;
-
-    if (!transcriptionText) {
-      throw new Error('Gemini returned empty transcription');
-    }
 
     return res.status(200).json({ text: transcriptionText });
 
