@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { RecordingState, Participant } from '../types';
-import { processAudioRecording, transcribeAudioDirect } from '../services/geminiService';
+import { processAudioRecording, processAudioChunked, ChunkProgress } from '../services/geminiService';
+import { groupChunksForTranscription, AudioChunk } from '../services/audioChunker';
 import AudioVisualizer from './AudioVisualizer';
 import ReactMarkdown from 'react-markdown';
 
@@ -102,6 +103,10 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     { index: 2, name: '', isRecorder: false }
   ]);
 
+  // State for chunked processing
+  const [audioChunks, setAudioChunks] = useState<AudioChunk[]>([]);
+  const [chunkProgress, setChunkProgress] = useState<ChunkProgress | null>(null);
+
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -109,6 +114,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
   const screenStreamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingStartTimeRef = useRef<number | null>(null);
+  const mimeTypeRef = useRef<string>('audio/webm');
 
   /**
    * Play audio notification to inform participants about the recording
@@ -247,6 +253,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
+      mimeTypeRef.current = mimeType;
 
       const recorder = new MediaRecorder(combinedStream, {
         mimeType,
@@ -263,10 +270,27 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
         setRecordedBlob(blob);
 
         // Calculate recording duration
+        let durationSec = 0;
         if (recordingStartTimeRef.current) {
           const durationMs = Date.now() - recordingStartTimeRef.current;
-          setRecordingDuration(Math.round(durationMs / 1000));
+          durationSec = Math.round(durationMs / 1000);
+          setRecordingDuration(durationSec);
           recordingStartTimeRef.current = null;
+        }
+
+        // Group raw chunks into transcription chunks (3 minutes each)
+        // Only use chunking for recordings > 2 minutes
+        if (durationSec > 120 && chunksRef.current.length > 0) {
+          const grouped = groupChunksForTranscription(
+            chunksRef.current,
+            mimeType,
+            180000, // 3 minutes per chunk
+            1000    // raw chunks are 1 second each
+          );
+          setAudioChunks(grouped);
+          console.log(`Recording split into ${grouped.length} chunks for processing`);
+        } else {
+          setAudioChunks([]);
         }
 
         stopStreams();
@@ -302,19 +326,44 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     setStatus(RecordingState.PROCESSING);
     setUploadProgress(t('recorder.uploadingToServer'));
     setSaved(false);
+    setChunkProgress(null);
 
     try {
       let text: string;
-      if (process.env.VITE_SUPABASE_URL) {
-        text = await processAudioRecording(recordedBlob, participants, transcriptionLanguage);
+
+      // Use chunked processing for long recordings (> 2 minutes)
+      if (audioChunks.length > 1) {
+        console.log(`Processing ${audioChunks.length} chunks...`);
+        text = await processAudioChunked(
+          audioChunks,
+          participants,
+          transcriptionLanguage,
+          (progress) => {
+            setChunkProgress(progress);
+            if (progress.status === 'uploading') {
+              setUploadProgress(t('recorder.uploadingChunk', {
+                current: progress.currentChunk,
+                total: progress.totalChunks,
+                time: progress.timeRange
+              }));
+            } else if (progress.status === 'transcribing') {
+              setUploadProgress(t('recorder.transcribingChunk', {
+                current: progress.currentChunk,
+                total: progress.totalChunks,
+                time: progress.timeRange
+              }));
+            }
+          }
+        );
       } else {
-        setUploadProgress(t('recorder.localProcessing'));
-        text = await transcribeAudioDirect(recordedBlob, participants, transcriptionLanguage);
+        // Single chunk or short recording - use original method
+        text = await processAudioRecording(recordedBlob, participants, transcriptionLanguage);
       }
 
       setTranscription(text);
       setStatus(RecordingState.COMPLETED);
       setUploadProgress("");
+      setChunkProgress(null);
 
       // Auto-save transcription if onSave prop is provided
       if (onSave && text) {
@@ -333,6 +382,7 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       setErrorMsg(t('errors.transcriptionError', { message: err.message }));
       setStatus(RecordingState.ERROR);
       setUploadProgress("");
+      setChunkProgress(null);
     }
   };
 
@@ -344,6 +394,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     setUploadProgress("");
     setSaved(false);
     setRecordingDuration(0);
+    setAudioChunks([]);
+    setChunkProgress(null);
+    chunksRef.current = [];
   };
 
   const copyToClipboard = () => {
@@ -626,9 +679,29 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
                 )}
               </button>
               {status === RecordingState.PROCESSING && (
-                <p className="text-xs text-surface-500 animate-pulse">
-                  {t('recorder.processingTime')}
-                </p>
+                <div className="w-full max-w-md space-y-2">
+                  {chunkProgress && chunkProgress.totalChunks > 1 ? (
+                    <>
+                      {/* Progress bar for chunked processing */}
+                      <div className="w-full bg-surface-700 rounded-full h-2">
+                        <div
+                          className="bg-accent-500 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${(chunkProgress.currentChunk / chunkProgress.totalChunks) * 100}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-surface-400 text-center">
+                        {t('recorder.chunkProgress', {
+                          current: chunkProgress.currentChunk,
+                          total: chunkProgress.totalChunks
+                        })}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-surface-500 animate-pulse text-center">
+                      {t('recorder.processingTime')}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}

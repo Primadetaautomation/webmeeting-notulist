@@ -6,6 +6,14 @@
 import { supabase } from '../lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
 import { Participant } from '../types';
+import { AudioChunk, formatTimeRange, combineTranscriptions } from './audioChunker';
+
+export interface ChunkProgress {
+  currentChunk: number;
+  totalChunks: number;
+  status: 'uploading' | 'transcribing' | 'done';
+  timeRange: string;
+}
 
 export const processAudioRecording = async (audioBlob: Blob, participants?: Participant[], language: 'en' | 'nl' = 'nl'): Promise<string> => {
   // 1. Check if Supabase is available
@@ -103,6 +111,128 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
 
     throw err;
   }
+};
+
+/**
+ * Process audio in chunks for long recordings
+ * This prevents timeouts by processing smaller segments sequentially
+ */
+export const processAudioChunked = async (
+  chunks: AudioChunk[],
+  participants?: Participant[],
+  language: 'en' | 'nl' = 'nl',
+  onProgress?: (progress: ChunkProgress) => void
+): Promise<string> => {
+  if (!supabase) {
+    throw new Error("Supabase is niet geconfigureerd.");
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error("Je moet ingelogd zijn om audio te uploaden.");
+  }
+
+  const transcriptions: { text: string; timeRange: string }[] = [];
+  const sessionId = uuidv4();
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const timeRange = formatTimeRange(chunk.startTime, chunk.endTime);
+
+    // Report progress: uploading
+    onProgress?.({
+      currentChunk: i + 1,
+      totalChunks: chunks.length,
+      status: 'uploading',
+      timeRange
+    });
+
+    // Upload chunk to Supabase
+    const fileName = `${user.id}/chunk-${sessionId}-${i}.webm`;
+    const { error: uploadError } = await supabase.storage
+      .from('recordings')
+      .upload(fileName, chunk.blob, {
+        contentType: chunk.blob.type,
+        upsert: false
+      });
+
+    if (uploadError) {
+      console.error(`Chunk ${i} upload error:`, uploadError);
+      throw new Error(`Fout bij uploaden chunk ${i + 1}: ${uploadError.message}`);
+    }
+
+    // Get signed URL
+    const { data: signedData, error: signedError } = await supabase.storage
+      .from('recordings')
+      .createSignedUrl(fileName, 3600);
+
+    if (signedError || !signedData?.signedUrl) {
+      throw new Error(`Fout bij genereren URL voor chunk ${i + 1}`);
+    }
+
+    // Report progress: transcribing
+    onProgress?.({
+      currentChunk: i + 1,
+      totalChunks: chunks.length,
+      status: 'transcribing',
+      timeRange
+    });
+
+    // Transcribe chunk
+    const apiBaseUrl = import.meta.env.VITE_API_URL || '';
+    const transcribeUrl = apiBaseUrl ? `${apiBaseUrl}/api/transcribe` : '/api/transcribe';
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min per chunk
+
+    try {
+      const response = await fetch(transcribeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileUrl: signedData.signedUrl,
+          mimeType: chunk.blob.type,
+          participants: participants || [],
+          language: language,
+          isChunk: true,
+          chunkIndex: i,
+          totalChunks: chunks.length
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error voor chunk ${i + 1}: ${errorText}`);
+      }
+
+      const result = await response.json();
+      transcriptions.push({ text: result.text, timeRange });
+
+      // Cleanup: delete chunk from storage after successful transcription
+      await supabase.storage.from('recordings').remove([fileName]);
+
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error(`Timeout bij chunk ${i + 1}. Probeer kortere opnames.`);
+      }
+      throw err;
+    }
+  }
+
+  // Report progress: done
+  onProgress?.({
+    currentChunk: chunks.length,
+    totalChunks: chunks.length,
+    status: 'done',
+    timeRange: formatTimeRange(chunks[0].startTime, chunks[chunks.length - 1].endTime)
+  });
+
+  // Combine all transcriptions
+  return combineTranscriptions(transcriptions);
 };
 
 /**
