@@ -17,6 +17,13 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// Increase timeout for long-running transcription requests
+app.use((_req, res, next) => {
+  // Set timeout to 10 minutes (600 seconds) for transcription
+  res.setTimeout(600000); // 10 minutes
+  next();
+});
+
 // Health check
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -24,6 +31,9 @@ app.get('/health', (_req: Request, res: Response) => {
 
 // Transcribe endpoint
 app.post('/api/transcribe', async (req: Request, res: Response) => {
+  // Set long timeout for this specific endpoint
+  req.setTimeout(600000);
+
   const { fileUrl, mimeType, participants, language = 'nl' } = req.body;
 
   if (!fileUrl) {
@@ -351,7 +361,12 @@ The audio was recorded in STEREO:
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
+
+// Set server-level timeouts for long transcription requests
+server.timeout = 600000; // 10 minutes
+server.keepAliveTimeout = 620000; // Slightly longer than timeout
+server.headersTimeout = 625000; // Slightly longer than keepAliveTimeout
