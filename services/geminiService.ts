@@ -50,6 +50,10 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
   const apiBaseUrl = import.meta.env.VITE_API_URL || '';
   const transcribeUrl = apiBaseUrl ? `${apiBaseUrl}/api/transcribe` : '/api/transcribe';
 
+  // Set a long timeout (10 minutes) for transcription requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 minutes
+
   try {
     const response = await fetch(transcribeUrl, {
       method: 'POST',
@@ -62,7 +66,10 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
         participants: participants || [],
         language: language
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       // Try to parse as JSON, fallback to text if not valid JSON
@@ -85,8 +92,15 @@ export const processAudioRecording = async (audioBlob: Blob, participants?: Part
       throw new Error("Ongeldige response van server: " + responseText.substring(0, 100));
     }
 
-  } catch (err) {
+  } catch (err: any) {
+    clearTimeout(timeoutId);
     console.error("API Error:", err);
+
+    // Provide better error message for timeout/abort
+    if (err.name === 'AbortError') {
+      throw new Error('Transcriptie timeout - de audio is mogelijk te lang. Probeer een kortere opname.');
+    }
+
     throw err;
   }
 };
