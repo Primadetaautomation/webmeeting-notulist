@@ -10,8 +10,9 @@ export interface AudioChunk {
   endTime: number;   // in seconds
 }
 
-// Default chunk duration: 3 minutes (180 seconds)
-const DEFAULT_CHUNK_DURATION_MS = 180000;
+// Default chunk duration: 2 minutes (120 seconds)
+// Smaller chunks give Gemini more room for complete transcription output
+const DEFAULT_CHUNK_DURATION_MS = 120000;
 
 /**
  * Groups raw MediaRecorder chunks (typically 1 second each) into larger chunks
@@ -160,33 +161,37 @@ function parseTranscription(text: string): {
     participants: [] as string[]
   };
 
-  // Split by common section headers
-  const transcriptionMatch = text.match(/###?\s*Transcripti(?:e|on)\s*([\s\S]*?)(?=\n---|\n##|$)/i);
+  // Split by common section headers - fixed regex patterns with proper capture groups
+  const transcriptionMatch = text.match(/###?\s*Transcripti(?:e|on)\s*\n([\s\S]*?)(?=\n---|\n##|$)/i);
   if (transcriptionMatch) {
     result.transcription = transcriptionMatch[1].trim();
   }
 
-  const summaryMatch = text.match(/##\s*Samenvatting|##\s*Summary\s*([\s\S]*?)(?=\n##|$)/i);
+  // Fixed: capture group now properly captures content after either header
+  const summaryMatch = text.match(/##\s*(?:Samenvatting|Summary)\s*\n([\s\S]*?)(?=\n##|$)/i);
   if (summaryMatch) {
     result.summary = summaryMatch[1]?.trim() || '';
   }
 
-  const actionMatch = text.match(/##\s*Actiepunten|##\s*Action Items\s*([\s\S]*?)(?=\n##|$)/i);
+  // Fixed: capture group now properly captures content after either header
+  const actionMatch = text.match(/##\s*(?:Actiepunten|Action Items)\s*\n([\s\S]*?)(?=\n##|$)/i);
   if (actionMatch) {
     const items = actionMatch[1]?.match(/[-\[]\s*\]?\s*(.+)/g) || [];
-    result.actionItems = items.map(i => i.replace(/^[-\[]\s*\]?\s*/, '').trim());
+    result.actionItems = items.map(i => i.replace(/^[-\[]\s*\]?\s*/, '').trim()).filter(i => i.length > 0);
   }
 
-  const decisionsMatch = text.match(/##\s*Beslissingen|##\s*Decisions\s*([\s\S]*?)(?=\n##|$)/i);
+  // Fixed: capture group now properly captures content after either header
+  const decisionsMatch = text.match(/##\s*(?:Beslissingen|Decisions)\s*\n([\s\S]*?)(?=\n##|$)/i);
   if (decisionsMatch) {
     const items = decisionsMatch[1]?.match(/-\s*(.+)/g) || [];
-    result.decisions = items.map(i => i.replace(/^-\s*/, '').trim());
+    result.decisions = items.map(i => i.replace(/^-\s*/, '').trim()).filter(i => i.length > 0);
   }
 
-  const participantsMatch = text.match(/##\s*Deelnemers|##\s*Participants\s*([\s\S]*?)(?=\n##|\n---|$)/i);
+  // Fixed: capture group now properly captures content after either header
+  const participantsMatch = text.match(/##\s*(?:Deelnemers|Participants)\s*\n([\s\S]*?)(?=\n##|\n---|$)/i);
   if (participantsMatch) {
     const items = participantsMatch[1]?.match(/-\s*(.+)/g) || [];
-    result.participants = items.map(i => i.replace(/^-\s*/, '').trim());
+    result.participants = items.map(i => i.replace(/^-\s*/, '').trim()).filter(i => i.length > 0);
   }
 
   return result;

@@ -278,13 +278,13 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           recordingStartTimeRef.current = null;
         }
 
-        // Group raw chunks into transcription chunks (3 minutes each)
-        // Only use chunking for recordings > 2 minutes
-        if (durationSec > 120 && chunksRef.current.length > 0) {
+        // Group raw chunks into transcription chunks (2 minutes each)
+        // Only use chunking for recordings > 90 seconds
+        if (durationSec > 90 && chunksRef.current.length > 0) {
           const grouped = groupChunksForTranscription(
             chunksRef.current,
             mimeType,
-            180000, // 3 minutes per chunk
+            120000, // 2 minutes per chunk (smaller chunks = more complete transcription per chunk)
             1000    // raw chunks are 1 second each
           );
           setAudioChunks(grouped);

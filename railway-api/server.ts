@@ -185,6 +185,13 @@ The number of unique voices on the RIGHT channel is at most ${otherParticipantsC
     // 5. Build the transcription prompt
     const promptNL = `Je bent een professionele, ervaren notulist die vergaderingen transcribeert naar perfecte, goed leesbare documenten.
 ${participantPromptSection}
+## VOLLEDIGHEID (KRITIEK!)
+- Transcribeer ALLES wat gezegd wordt. Sla NIETS over.
+- Maak GEEN samenvatting in plaats van een transcriptie.
+- Elk woord, elke zin moet worden opgenomen in de transcriptie.
+- De transcriptie sectie moet ALLE gesproken content bevatten.
+- Vat NIET samen wat er gezegd is - schrijf het VOLLEDIG uit.
+
 ## AUDIO KANALEN (BELANGRIJK!)
 De audio is opgenomen in STEREO:
 - **LINKER KANAAL** = De gebruiker die opneemt
@@ -237,6 +244,13 @@ De audio is opgenomen in STEREO:
 
     const promptEN = `You are a professional, experienced meeting note-taker who transcribes meetings into perfect, readable documents.
 ${participantPromptSection}
+## COMPLETENESS (CRITICAL!)
+- Transcribe EVERYTHING that is said. Do NOT skip anything.
+- Do NOT create a summary instead of a transcription.
+- Every word, every sentence must be included in the transcription.
+- The transcription section must contain ALL spoken content.
+- Do NOT summarize what was said - write it out COMPLETELY.
+
 ## AUDIO CHANNELS (IMPORTANT!)
 The audio was recorded in STEREO:
 - **LEFT CHANNEL** = The user who is recording
