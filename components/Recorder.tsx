@@ -1,8 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { RecordingState, Participant } from '../types';
-import { processAudioRecording, processAudioChunked, ChunkProgress } from '../services/geminiService';
-import { groupChunksForTranscription, AudioChunk } from '../services/audioChunker';
+import { processAudioRecording } from '../services/geminiService';
 import AudioVisualizer from './AudioVisualizer';
 import ReactMarkdown from 'react-markdown';
 
@@ -103,9 +102,8 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     { index: 2, name: '', isRecorder: false }
   ]);
 
-  // State for chunked processing
-  const [audioChunks, setAudioChunks] = useState<AudioChunk[]>([]);
-  const [chunkProgress, setChunkProgress] = useState<ChunkProgress | null>(null);
+  // State for chunked processing (disabled - single file upload now)
+  const [audioChunks, setAudioChunks] = useState<never[]>([]);
 
   // Refs for managing audio context and streams
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -278,20 +276,8 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
           recordingStartTimeRef.current = null;
         }
 
-        // Group raw chunks into transcription chunks (2 minutes each)
-        // Only use chunking for recordings > 90 seconds
-        if (durationSec > 90 && chunksRef.current.length > 0) {
-          const grouped = groupChunksForTranscription(
-            chunksRef.current,
-            mimeType,
-            120000, // 2 minutes per chunk (smaller chunks = more complete transcription per chunk)
-            1000    // raw chunks are 1 second each
-          );
-          setAudioChunks(grouped);
-          console.log(`Recording split into ${grouped.length} chunks for processing`);
-        } else {
-          setAudioChunks([]);
-        }
+        // Always send as single file - chunking causes corrupt audio and Gemini hallucinations
+        setAudioChunks([]);
 
         stopStreams();
         setStatus(RecordingState.COMPLETED);
@@ -326,44 +312,14 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     setStatus(RecordingState.PROCESSING);
     setUploadProgress(t('recorder.uploadingToServer'));
     setSaved(false);
-    setChunkProgress(null);
 
     try {
-      let text: string;
-
-      // Use chunked processing for long recordings (> 2 minutes)
-      if (audioChunks.length > 1) {
-        console.log(`Processing ${audioChunks.length} chunks...`);
-        text = await processAudioChunked(
-          audioChunks,
-          participants,
-          transcriptionLanguage,
-          (progress) => {
-            setChunkProgress(progress);
-            if (progress.status === 'uploading') {
-              setUploadProgress(t('recorder.uploadingChunk', {
-                current: progress.currentChunk,
-                total: progress.totalChunks,
-                time: progress.timeRange
-              }));
-            } else if (progress.status === 'transcribing') {
-              setUploadProgress(t('recorder.transcribingChunk', {
-                current: progress.currentChunk,
-                total: progress.totalChunks,
-                time: progress.timeRange
-              }));
-            }
-          }
-        );
-      } else {
-        // Single chunk or short recording - use original method
-        text = await processAudioRecording(recordedBlob, participants, transcriptionLanguage);
-      }
+      // Always send complete audio as single file to prevent hallucinations from corrupt chunks
+      const text = await processAudioRecording(recordedBlob, participants, transcriptionLanguage);
 
       setTranscription(text);
       setStatus(RecordingState.COMPLETED);
       setUploadProgress("");
-      setChunkProgress(null);
 
       // Auto-save transcription if onSave prop is provided
       if (onSave && text) {
@@ -382,7 +338,6 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
       setErrorMsg(t('errors.transcriptionError', { message: err.message }));
       setStatus(RecordingState.ERROR);
       setUploadProgress("");
-      setChunkProgress(null);
     }
   };
 
@@ -395,7 +350,6 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
     setSaved(false);
     setRecordingDuration(0);
     setAudioChunks([]);
-    setChunkProgress(null);
     chunksRef.current = [];
   };
 
@@ -680,27 +634,9 @@ const Recorder: React.FC<RecorderProps> = ({ onSave }) => {
               </button>
               {status === RecordingState.PROCESSING && (
                 <div className="w-full max-w-md space-y-2">
-                  {chunkProgress && chunkProgress.totalChunks > 1 ? (
-                    <>
-                      {/* Progress bar for chunked processing */}
-                      <div className="w-full bg-surface-700 rounded-full h-2">
-                        <div
-                          className="bg-accent-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${(chunkProgress.currentChunk / chunkProgress.totalChunks) * 100}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-surface-400 text-center">
-                        {t('recorder.chunkProgress', {
-                          current: chunkProgress.currentChunk,
-                          total: chunkProgress.totalChunks
-                        })}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-surface-500 animate-pulse text-center">
-                      {t('recorder.processingTime')}
-                    </p>
-                  )}
+                  <p className="text-xs text-surface-500 animate-pulse text-center">
+                    {t('recorder.processingTime')}
+                  </p>
                 </div>
               )}
             </div>

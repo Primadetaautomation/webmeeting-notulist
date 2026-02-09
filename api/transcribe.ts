@@ -182,6 +182,14 @@ ${participantPromptSection}
 - De transcriptie sectie moet ALLE gesproken content bevatten.
 - Vat NIET samen wat er gezegd is - schrijf het VOLLEDIG uit.
 
+## ANTI-HALLUCINATIE (KRITIEK!)
+- Transcribeer ALLEEN wat je daadwerkelijk kunt horen in de audio.
+- VERZIN NOOIT dialoog, gesprekken of content die niet in de audio staat.
+- Als een gedeelte onverstaanbaar is, schrijf dan [onverstaanbaar].
+- Als er stilte is, schrijf dan [stilte].
+- Het is BETER om een korte of lege transcriptie te geven dan om nep-content te verzinnen.
+- Als je de audio niet kunt decoderen of horen, zeg dat dan expliciet.
+
 ## AUDIO KANALEN (BELANGRIJK!)
 De audio is opgenomen in STEREO:
 - **LINKER KANAAL** = De gebruiker die opneemt
@@ -240,6 +248,14 @@ ${participantPromptSection}
 - Every word, every sentence must be included in the transcription.
 - The transcription section must contain ALL spoken content.
 - Do NOT summarize what was said - write it out COMPLETELY.
+
+## ANTI-HALLUCINATION (CRITICAL!)
+- ONLY transcribe what you can actually hear in the audio.
+- NEVER fabricate, invent, or make up dialogue or content that is not in the audio.
+- If a section is unintelligible, write [unintelligible].
+- If there is silence, write [silence].
+- It is BETTER to provide a short or empty transcription than to fabricate fake content.
+- If you cannot decode or hear the audio, state that explicitly.
 
 ## AUDIO CHANNELS (IMPORTANT!)
 The audio was recorded in STEREO:
